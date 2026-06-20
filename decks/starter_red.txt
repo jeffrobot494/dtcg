@@ -1,0 +1,13 @@
+# Burn Starter
+# Comments start with # and blank lines are ignored.
+# Format: <count> <card_id>
+
+12 mountain
+2 normal_man
+2 big_man
+2 erupt
+2 beseech_the_shadows
+2 choking_fume
+4 fire_servant
+4 immolation_deathshaman
+4 mighty_serpent_of_the_vale

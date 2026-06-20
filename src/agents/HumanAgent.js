@@ -1,0 +1,43 @@
+import { Agent } from './Agent.js';
+
+// HumanAgent stores a pending decision request. The UI inspects `pending` to
+// know what controls to show; the UI calls resolve(value) when the user decides.
+// HumanAgent itself never touches the DOM.
+export class HumanAgent extends Agent {
+  constructor() {
+    super();
+    this.pending = null;
+    this.onChange = null;
+  }
+
+  _request(kind, extra = {}) {
+    return new Promise(resolve => {
+      this.pending = { kind, resolve, ...extra };
+      this.onChange?.();
+    });
+  }
+
+  resolve(value) {
+    if (!this.pending) return;
+    const req = this.pending;
+    this.pending = null;
+    this.onChange?.();
+    req.resolve(value);
+  }
+
+  choosePriorityAction(match) {
+    return this._request('priority');
+  }
+
+  chooseTarget(match, filter, source) {
+    return this._request('target', { filter, source });
+  }
+
+  declareAttackers(match) {
+    return this._request('attackers');
+  }
+
+  declareBlockers(match, attackers) {
+    return this._request('blockers', { attackers });
+  }
+}
