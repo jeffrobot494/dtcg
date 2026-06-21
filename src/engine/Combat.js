@@ -25,6 +25,13 @@ export async function runCombatPhase(match) {
   }
   match.notify(`${match.activePlayer.name} attacks with: ${attackers.map(a => a.name).join(', ')}.`);
 
+  // Fire creature_attacks triggers for each attacker. Any resulting triggered
+  // abilities sit on the stack to be resolved during the priority window below.
+  for (const a of attackers) {
+    match._queueTriggersForEvent('creature_attacks', { card: a });
+  }
+  await match._processPendingTriggers();
+
   // --- Priority window after attackers declared ---
   match.combatStep = 'after_attackers';
   await match.priorityLoop();

@@ -84,6 +84,11 @@ function describeTriggerPrefix(trig) {
     if (cond === 'you_control') return 'Whenever a creature you control dies,';
     return 'Whenever a creature dies,';
   }
+  if (trig.event === 'creature_attacks') {
+    if (cond === 'self')        return 'When this creature attacks,';
+    if (cond === 'you_control') return 'Whenever a creature you control attacks,';
+    return 'Whenever a creature attacks,';
+  }
   return `When ${trig.event} (${cond}):`;
 }
 

@@ -29,9 +29,9 @@ export class BasicAI extends Agent {
     return action;
   }
 
-  async chooseTarget(match, filter, source) {
+  async chooseTarget(match, filter, source, effect) {
     // No delay — sub-decision inside an already-paced cast.
-    return this._pickTarget(match, filter, source);
+    return this._pickTarget(match, filter, source, effect);
   }
 
   async chooseXValue(match, card, max) {
@@ -91,7 +91,7 @@ export class BasicAI extends Agent {
     return { type: 'pass' };
   }
 
-  _pickTarget(match, filter, source) {
+  _pickTarget(match, filter, source, effect) {
     const me = this._meIn(match);
     const opp = match.opponentOf(me);
 
@@ -105,8 +105,7 @@ export class BasicAI extends Agent {
     if (candidates.length === 0) return null;
 
     // For heal-style effects, prefer the most damaged creature.
-    const matchingEffect = source?.def?.effects?.find(e => e.target?.type === filter.type);
-    if (matchingEffect?.id === 'remove_damage') {
+    if (effect?.id === 'remove_damage') {
       const damaged = candidates.filter(t => !t.isPlayer && t.damage > 0);
       if (damaged.length > 0) {
         damaged.sort((a, b) => b.damage - a.damage);
@@ -114,14 +113,30 @@ export class BasicAI extends Agent {
       }
     }
     // For toughness-reducing modifiers, pick a killable enemy creature.
-    if (matchingEffect?.id === 'modify_stats' && (matchingEffect.toughness ?? 0) < 0) {
-      const dT = matchingEffect.toughness;
+    if (effect?.id === 'modify_stats' && (effect.toughness ?? 0) < 0) {
+      const dT = effect.toughness;
       const killable = candidates.filter(t =>
         !t.isPlayer && t.controller === opp && t.damage >= (t.toughness + dT)
       );
       if (killable.length > 0) {
         killable.sort((a, b) => valueOfCreature(b) - valueOfCreature(a));
         return killable[0];
+      }
+    }
+    // For grant_keywords: prefer friendly creatures that don't already have all
+    // the granted keywords. Among those, prefer current attackers (tapped,
+    // non-sick) since the grant lasts only until end of turn.
+    if (effect?.id === 'grant_keywords') {
+      const keywords = effect.keywords ?? [];
+      const friendly = candidates.filter(t =>
+        !t.isPlayer && t.isCreature && t.controller === me
+      );
+      const needsIt = friendly.filter(t => keywords.some(k => !t.hasKeyword(k)));
+      if (needsIt.length > 0) {
+        const attacking = needsIt.filter(t => t.tapped && !t.summoningSick);
+        const pool = attacking.length > 0 ? attacking : needsIt;
+        pool.sort((a, b) => valueOfCreature(b) - valueOfCreature(a));
+        return pool[0];
       }
     }
 

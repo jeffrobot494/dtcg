@@ -196,7 +196,7 @@ export class Match {
     const targets = [];
     for (const effect of effects) {
       if (effect.target) {
-        const t = await player.agent.chooseTarget(this, effect.target, card);
+        const t = await player.agent.chooseTarget(this, effect.target, card, effect);
         if (t == null) {
           this.notify(`${player.name} cancels casting ${card.name}.`);
           return false;
@@ -368,7 +368,7 @@ export class Match {
       let aborted = false;
       for (const effect of effects) {
         if (effect.target) {
-          const t = await controller.agent.chooseTarget(this, effect.target, source);
+          const t = await controller.agent.chooseTarget(this, effect.target, source, effect);
           if (t == null) { aborted = true; break; }
           targets.push(t);
         } else {
