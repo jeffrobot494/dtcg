@@ -5,6 +5,7 @@ import { isValidTarget } from './Targeting.js';
 import { getEffect } from '../cards/effects/index.js';
 import { matchesCondition, scopeForEvent } from './Triggers.js';
 import { runCombatPhase } from './Combat.js';
+import { canPayCost, payCost, maxXFromPool, formatCost, formatPool, emptyPool } from './Cost.js';
 
 export class Match {
   constructor(players) {
@@ -76,7 +77,7 @@ export class Match {
     if (this.gameOver) return;
 
     this.phase = 'end';
-    for (const p of this.players) p.manaPool = 0;
+    for (const p of this.players) p.manaPool = emptyPool();
 
     this.activeIndex = 1 - this.activeIndex;
     if (this.activeIndex === 0) this.turn++;
@@ -142,16 +143,20 @@ export class Match {
   _actionTapForMana(player, card) {
     if (card.tapped || !card.isLand || card.zone !== player.battlefield) return false;
     if (card.controller !== player) return false;
+    const manaAbility = card.def.abilities?.find(a => a.kind === 'mana');
+    if (!manaAbility) return false;
     card.tapped = true;
-    player.manaPool += 1;
-    this.notify(`${player.name} taps ${card.name} for mana (pool: ${player.manaPool}).`);
+    const produces = manaAbility.produces ?? {};
+    for (const [color, amount] of Object.entries(produces)) {
+      player.manaPool[color] = (player.manaPool[color] ?? 0) + amount;
+    }
+    this.notify(`${player.name} taps ${card.name} for mana (pool: ${formatPool(player.manaPool)}).`);
     return true;
   }
 
   async _actionCast(player, card) {
     if (card.zone !== player.hand) return false;
-    const cost = card.cost?.mana ?? 0;
-    if (player.manaPool < cost) return false;
+    if (!canPayCost(player.manaPool, card.cost)) return false;
 
     const isSorcerySpeed = card.isCreature || card.def.type === 'sorcery';
     if (isSorcerySpeed) {
@@ -160,7 +165,25 @@ export class Match {
       if (this.phase !== 'main1' && this.phase !== 'main2') return false;
     }
 
-    // Gather targets BEFORE paying cost so cancellation costs nothing.
+    // Gather X value before targets. Cancellation costs nothing.
+    let xValue = 0;
+    if (card.cost?.x === 'mana') {
+      const maxX = maxXFromPool(player.manaPool, card.cost);
+      xValue = await player.agent.chooseXValue(this, card, maxX);
+      if (xValue == null || xValue < 0 || xValue > maxX) {
+        this.notify(`${player.name} cancels casting ${card.name}.`);
+        return false;
+      }
+    } else if (card.cost?.x === 'life') {
+      const maxX = player.life;
+      xValue = await player.agent.chooseXValue(this, card, maxX);
+      if (xValue == null || xValue < 0 || xValue > maxX) {
+        this.notify(`${player.name} cancels casting ${card.name}.`);
+        return false;
+      }
+    }
+
+    // Gather targets.
     const effects = card.def.effects ?? [];
     const targets = [];
     for (const effect of effects) {
@@ -170,7 +193,7 @@ export class Match {
           this.notify(`${player.name} cancels casting ${card.name}.`);
           return false;
         }
-        if (!isValidTarget(t, effect.target, this)) {
+        if (!isValidTarget(t, effect.target, this, player)) {
           this.notify(`Invalid target.`);
           return false;
         }
@@ -180,15 +203,22 @@ export class Match {
       }
     }
 
-    // Pay and move.
-    player.manaPool -= cost;
+    // Pay mana (base, plus X if X is mana) and pay life (if X is life).
+    const effectiveCost = { ...card.cost };
+    if (card.cost?.x === 'mana' && xValue > 0) {
+      effectiveCost.generic = (effectiveCost.generic ?? 0) + xValue;
+    }
+    payCost(player.manaPool, effectiveCost);
+    if (card.cost?.x === 'life' && xValue > 0) {
+      player.life -= xValue;
+      this.notify(`${player.name} pays ${xValue} life.`);
+    }
     player.hand.remove(card);
 
     if (card.isCreature) {
-      // Sorcery-speed creatures resolve immediately in this slice.
       player.battlefield.add(card);
       card.summoningSick = true;
-      this.notify(`${player.name} casts ${card.name} (paid ${cost}).`);
+      this.notify(`${player.name} casts ${card.name} (paid ${formatCost(effectiveCost)}).`);
     } else {
       this.stackZone.add(card);
       this.stack.push({
@@ -197,8 +227,10 @@ export class Match {
         controller: player,
         targets,
         effects: card.def.effects ?? [],
+        x: xValue,
       });
-      this.notify(`${player.name} casts ${card.name}${this._describeTargets(targets)} (paid ${cost}).`);
+      const xText = card.cost?.x === 'mana' ? ` {X=${xValue}}` : '';
+      this.notify(`${player.name} casts ${card.name}${xText}${this._describeTargets(targets)} (paid ${formatCost(effectiveCost)}).`);
     }
     return true;
   }
@@ -218,12 +250,12 @@ export class Match {
       const effectDef = effects[i];
       const target = targets[i];
       // Fizzle this effect if its chosen target became invalid.
-      if (effectDef.target && !isValidTarget(target, effectDef.target, this)) {
+      if (effectDef.target && !isValidTarget(target, effectDef.target, this, controller)) {
         this.notify(`${source.name}'s target is no longer valid.`);
         continue;
       }
       const fn = getEffect(effectDef.id);
-      const ctx = { source, controller, target };
+      const ctx = { source, controller, target, x: item.x };
       await fn(this, ctx, effectDef);
     }
 

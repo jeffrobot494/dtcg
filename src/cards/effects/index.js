@@ -5,5 +5,6 @@ import './destroy.js';
 import './draw.js';
 import './life.js';
 import './aoe_damage.js';
+import './heal.js';
 
 export { getEffect, defineEffect } from './registry.js';

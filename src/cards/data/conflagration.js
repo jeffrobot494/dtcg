@@ -4,7 +4,7 @@ export default {
   type: 'sorcery',
   color: 'R',
   manaValue: 3,
-  cost: { mana: 3 },
+  cost: { generic: 2, R: 1 },
   effects: [
     { id: 'destroy_target', target: { type: 'land' } },
   ],

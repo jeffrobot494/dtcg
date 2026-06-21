@@ -2,12 +2,11 @@
 # Comments start with # and blank lines are ignored.
 # Format: <count> <card_id>
 
-12 mountain
-2 normal_man
-2 big_man
+9 mountain
+9 swamp
+6 mountain_warrior
+2 serpent_of_the_vale
+4 immolation_shaman
+4 boil
 2 erupt
-2 beseech_the_shadows
-2 choking_fume
-4 fire_servant
-4 immolation_deathshaman
-4 mighty_serpent_of_the_vale
+4 beseech_the_shadows

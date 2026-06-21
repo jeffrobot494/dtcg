@@ -4,7 +4,7 @@ export default {
   type: 'creature',
   color: 'B',
   manaValue: 5,
-  cost: { mana: 5 },
+  cost: { generic: 4, B: 1 },
   power: 2,
   toughness: 4,
   keywords: ['deathtouch'],

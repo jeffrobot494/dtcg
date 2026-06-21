@@ -4,7 +4,7 @@ export default {
   type: 'instant',
   color: 'R',
   manaValue: 1,
-  cost: { mana: 1 },
+  cost: { R: 1 },
   effects: [
     { id: 'deal_damage', amount: 1, target: { type: 'any' } },
   ],

@@ -1,4 +1,5 @@
 import mountain from './mountain.js';
+import swamp from './swamp.js';
 import mountainWarrior from './mountain_warrior.js';
 import boil from './boil.js';
 import rockeater from './rockeater.js';
@@ -14,9 +15,13 @@ import normalMan from './normal_man.js';
 import bigMan from './big_man.js';
 import fireServant from './fire_servant.js';
 import immolationDeathshaman from './immolation_deathshaman.js';
+import blaze from './blaze.js';
+import drainLife from './drain_life.js';
+import shareBlood from './share_blood.js';
 
 const database = {
   mountain,
+  swamp,
   mountain_warrior: mountainWarrior,
   boil,
   rockeater,
@@ -32,6 +37,9 @@ const database = {
   big_man: bigMan,
   fire_servant: fireServant,
   immolation_deathshaman: immolationDeathshaman,
+  blaze,
+  drain_life: drainLife,
+  share_blood: shareBlood,
 };
 
 export function getCardDef(id) {

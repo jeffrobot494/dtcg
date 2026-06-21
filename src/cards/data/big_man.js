@@ -4,7 +4,7 @@ export default {
   type: 'creature',
   color: 'R',
   manaValue: 1,
-  cost: { mana: 1 },
+  cost: { R: 1 },
   power: 2,
   toughness: 2,
 };

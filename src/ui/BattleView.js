@@ -1,5 +1,6 @@
 import { isValidTarget, describeFilter } from '../engine/Targeting.js';
 import { canBlock } from '../engine/Combat.js';
+import { canPayCost, formatCost, formatPool } from '../engine/Cost.js';
 import { describeCard } from './cardText.js';
 
 const TOOLTIP_DELAY_MS = 500;
@@ -69,7 +70,7 @@ export class BattleView {
         <div class="player-header${targetableClass}" data-player-name="${this.escape(p.name)}">
           <span>${p.name}</span>
           <span class="life">♥ ${p.life}</span>
-          <span class="mana">Mana: ${p.manaPool}</span>
+          <span class="mana">Mana: ${formatPool(p.manaPool)}</span>
           ${isActive ? '<span style="color:#fc0">(active)</span>' : ''}
           ${p.agent.pending ? '<span style="color:#0c8">(priority)</span>' : ''}
         </div>
@@ -117,7 +118,7 @@ export class BattleView {
 
     const parts = [];
     parts.push(`<div class="card-name">${this.escape(card.name)}</div>`);
-    if (card.cost?.mana) parts.push(`<div class="card-cost">cost ${card.cost.mana}</div>`);
+    parts.push(this._renderCostLine(card));
     parts.push(`<div class="card-type">${card.def.type}</div>`);
     if (card.isCreature) {
       let stats = `${card.power}/${card.toughness}`;
@@ -141,9 +142,10 @@ export class BattleView {
         .map(t => t.name).join(', ');
       const arrow = targetsTxt ? ` → ${this.escape(targetsTxt)}` : '';
       const isTop = i === top;
+      const xLabel = item.x ? ` {X=${item.x}}` : '';
       const label = item.type === 'triggered_ability'
         ? `${this.escape(item.source.name)}'s ability`
-        : this.escape(item.source.name);
+        : `${this.escape(item.source.name)}${xLabel}`;
       const tag = item.type === 'triggered_ability' ? '<span class="stack-tag">TRIGGER</span> ' : '';
       return `
         <div class="stack-item${isTop ? ' top' : ''}">
@@ -178,10 +180,19 @@ export class BattleView {
     switch (req.kind) {
       case 'priority':  return 'choose an action (or pass)';
       case 'target':    return `choose ${describeFilter(req.filter)} for ${this.escape(req.source?.name ?? '')}`;
+      case 'xvalue': {
+        const unit = req.kind === 'life' ? 'X life' : 'X';
+        return `choose ${unit} for ${this.escape(req.card?.name ?? '')} (max ${req.max})`;
+      }
       case 'attackers': return 'declare attackers';
       case 'blockers':  return 'declare blockers';
     }
     return req.kind;
+  }
+
+  _renderCostLine(card) {
+    const text = formatCost(card.cost);
+    return text ? `<div class="card-cost">cost ${text}</div>` : '';
   }
 
   renderRequestControls(player, req) {
@@ -198,6 +209,16 @@ export class BattleView {
         return `
           <button data-act="cancel-target">Cancel</button>
           <small>Click a highlighted target.</small>`;
+      case 'xvalue': {
+        const hint = req.kind === 'life'
+          ? 'X life will be paid in addition to the mana cost.'
+          : 'X mana adds to the cost.';
+        return `
+          <input type="number" id="x-input" min="0" max="${req.max}" value="0" style="width:60px;">
+          <button data-act="confirm-x">Confirm</button>
+          <button data-act="cancel-x">Cancel</button>
+          <small>${hint}</small>`;
+      }
       case 'attackers':
         return `
           <button data-act="confirm-attackers">Confirm attackers (${this.selectedAttackers.size})</button>
@@ -231,13 +252,13 @@ export class BattleView {
   isCardTargetable(card) {
     const t = this.pendingTargetRequest();
     if (!t) return false;
-    return isValidTarget(card, t.req.filter, this.match);
+    return isValidTarget(card, t.req.filter, this.match, t.player);
   }
 
   isPlayerTargetable(player) {
     const t = this.pendingTargetRequest();
     if (!t) return false;
-    return isValidTarget(player, t.req.filter, this.match);
+    return isValidTarget(player, t.req.filter, this.match, t.player);
   }
 
   // ---------- input ----------
@@ -310,7 +331,7 @@ export class BattleView {
     // Target request takes priority over other clicks.
     const targetReq = this.pendingTargetRequest();
     if (targetReq) {
-      if (isValidTarget(card, targetReq.req.filter, m)) {
+      if (isValidTarget(card, targetReq.req.filter, m, targetReq.player)) {
         targetReq.player.agent.resolve(card);
       }
       return;
@@ -338,7 +359,7 @@ export class BattleView {
     const targetReq = this.pendingTargetRequest();
     if (!targetReq) return;
     const target = this.match.players.find(p => p.name === playerName);
-    if (target && isValidTarget(target, targetReq.req.filter, this.match)) {
+    if (target && isValidTarget(target, targetReq.req.filter, this.match, targetReq.player)) {
       targetReq.player.agent.resolve(target);
     }
   }
@@ -352,17 +373,17 @@ export class BattleView {
     const sorcerySpeedOk = isActive && stackEmpty && inMain;
 
     if (card.zone === actingPlayer.hand) {
-      const cost = card.cost?.mana ?? 0;
+      const affordable = canPayCost(actingPlayer.manaPool, card.cost);
       if (card.isLand) {
         if (sorcerySpeedOk && !actingPlayer.landPlayedThisTurn) {
           actingPlayer.agent.resolve({ type: 'play_land', card });
         }
       } else if (card.def.type === 'instant') {
-        if (actingPlayer.manaPool >= cost) {
+        if (affordable) {
           actingPlayer.agent.resolve({ type: 'cast', card });
         }
       } else if (card.isCreature || card.def.type === 'sorcery') {
-        if (sorcerySpeedOk && actingPlayer.manaPool >= cost) {
+        if (sorcerySpeedOk && affordable) {
           actingPlayer.agent.resolve({ type: 'cast', card });
         }
       }
@@ -419,6 +440,24 @@ export class BattleView {
     } else if (act === 'cancel-target') {
       const t = this.pendingTargetRequest();
       if (t) t.player.agent.resolve(null);
+    } else if (act === 'confirm-x') {
+      const input = document.getElementById('x-input');
+      const raw = parseInt(input?.value, 10);
+      for (const p of m.players) {
+        const req = p.agent.pending;
+        if (req?.kind === 'xvalue') {
+          const x = Math.max(0, Math.min(req.max, isNaN(raw) ? 0 : raw));
+          p.agent.resolve(x);
+          return;
+        }
+      }
+    } else if (act === 'cancel-x') {
+      for (const p of m.players) {
+        if (p.agent.pending?.kind === 'xvalue') {
+          p.agent.resolve(null);
+          return;
+        }
+      }
     } else if (act === 'confirm-attackers') {
       const p = m.activePlayer;
       if (p.agent.pending?.kind === 'attackers') {

@@ -5,14 +5,16 @@
 // Methods:
 //   choosePriorityAction(match) -> { type: 'pass' | 'play_land' | 'tap_for_mana' | 'cast', card? }
 //   chooseTarget(match, filter, source) -> Card | MatchPlayer | null (null = cancel cast)
+//   chooseXValue(match, card, max) -> integer in [0, max] | null (null = cancel cast)
 //   declareAttackers(match) -> Card[]
 //   declareBlockers(match, attackers) -> [{ attacker, blocker }]
 //
-// Future additions: chooseMode, declareCost (X, additional life), mulligan.
+// Future additions: declareCost (additional life cost), chooseMode, mulligan.
 
 export class Agent {
   async choosePriorityAction(match) { throw new Error('not implemented'); }
   async chooseTarget(match, filter, source) { throw new Error('not implemented'); }
+  async chooseXValue(match, card, max) { throw new Error('not implemented'); }
   async declareAttackers(match) { throw new Error('not implemented'); }
   async declareBlockers(match, attackers) { throw new Error('not implemented'); }
 }

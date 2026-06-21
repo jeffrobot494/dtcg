@@ -1,5 +1,6 @@
 // Generates human-readable rules text from a structured card definition.
 // Used by the tooltip; a single source of truth that stays in sync with behavior.
+import { formatCost } from '../engine/Cost.js';
 
 export function describeCard(def) {
   const out = [];
@@ -10,14 +11,16 @@ export function describeCard(def) {
   if (def.color)   typeLine += `  ·  ${def.color}`;
   out.push(`<div class="tt-type">${escape(typeLine)}</div>`);
 
-  if (def.cost?.mana != null) {
-    out.push(`<div class="tt-cost">Cost: ${def.cost.mana}</div>`);
-  }
+  const costText = formatCost(def.cost);
+  if (costText) out.push(`<div class="tt-cost">Cost: ${costText}</div>`);
   if (def.type === 'creature') {
     out.push(`<div class="tt-stats">${def.power}/${def.toughness}</div>`);
   }
 
   const rules = [];
+  if (def.cost?.x === 'life') {
+    rules.push('Additional cost: pay X life.');
+  }
   if (def.keywords?.length) {
     rules.push(def.keywords.map(capitalize).join(', '));
   }
@@ -33,12 +36,20 @@ export function describeCard(def) {
   return out.join('');
 }
 
+function describeAmount(amount) {
+  if (amount === 'x')      return 'X';
+  if (amount === 'half_x') return 'half X (rounded up)';
+  return amount;
+}
+
 function describeEffect(eff) {
   switch (eff.id) {
     case 'deal_damage':
-      return `Deal ${eff.amount} damage to ${describeFilter(eff.target)}.`;
+      return `Deal ${describeAmount(eff.amount)} damage to ${describeFilter(eff.target)}.`;
+    case 'remove_damage':
+      return `Heal ${describeAmount(eff.amount)} damage from ${describeFilter(eff.target)}.`;
     case 'damage_to_all':
-      return `Deal ${eff.amount} damage to ${describeAoeFilter(eff.filter)}.`;
+      return `Deal ${describeAmount(eff.amount)} damage to ${describeAoeFilter(eff.filter)}.`;
     case 'destroy_target':
       return `Destroy ${describeFilter(eff.target)}.`;
     case 'draw_cards':

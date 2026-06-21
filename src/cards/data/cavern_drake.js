@@ -4,7 +4,7 @@ export default {
   type: 'creature',
   color: 'R',
   manaValue: 4,
-  cost: { mana: 4 },
+  cost: { generic: 3, R: 1 },
   power: 1,
   toughness: 1,
   keywords: ['flying'],

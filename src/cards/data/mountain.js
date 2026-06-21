@@ -3,8 +3,9 @@ export default {
   name: 'Mountain',
   type: 'land',
   subtype: 'basic',
+  color: 'R',
   cost: null,
   abilities: [
-    { kind: 'mana', cost: { tap: true }, produces: { mana: 1 } },
+    { kind: 'mana', cost: { tap: true }, produces: { R: 1 } },
   ],
 };

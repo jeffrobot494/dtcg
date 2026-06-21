@@ -1,12 +1,13 @@
 import { Zone } from '../cards/Zone.js';
 import { DeckLoader } from '../decks/DeckLoader.js';
+import { emptyPool } from './Cost.js';
 
 export class MatchPlayer {
   constructor(name, deckDef, agent) {
     this.name = name;
     this.life = 20;
     this.agent = agent;
-    this.manaPool = 0;
+    this.manaPool = emptyPool();
     this.landPlayedThisTurn = false;
     this.isPlayer = true;
 
