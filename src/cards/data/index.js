@@ -18,6 +18,8 @@ import immolationDeathshaman from './immolation_deathshaman.js';
 import blaze from './blaze.js';
 import drainLife from './drain_life.js';
 import shareBlood from './share_blood.js';
+import touchOfZot from './touch_of_zot.js';
+import immolate from './immolate.js';
 
 const database = {
   mountain,
@@ -40,6 +42,8 @@ const database = {
   blaze,
   drain_life: drainLife,
   share_blood: shareBlood,
+  touch_of_zot: touchOfZot,
+  immolate,
 };
 
 export function getCardDef(id) {

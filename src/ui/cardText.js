@@ -48,6 +48,15 @@ function describeEffect(eff) {
       return `Deal ${describeAmount(eff.amount)} damage to ${describeFilter(eff.target)}.`;
     case 'remove_damage':
       return `Heal ${describeAmount(eff.amount)} damage from ${describeFilter(eff.target)}.`;
+    case 'grant_keywords': {
+      const ks = (eff.keywords ?? []).map(capitalize).join(' and ');
+      return `${capitalize(describeFilter(eff.target))} gains ${ks} until end of turn.`;
+    }
+    case 'modify_stats': {
+      const p = eff.power ?? 0, t = eff.toughness ?? 0;
+      const pSign = p >= 0 ? '+' : '', tSign = t >= 0 ? '+' : '';
+      return `${capitalize(describeFilter(eff.target))} gets ${pSign}${p}/${tSign}${t} until end of turn.`;
+    }
     case 'damage_to_all':
       return `Deal ${describeAmount(eff.amount)} damage to ${describeAoeFilter(eff.filter)}.`;
     case 'destroy_target':

@@ -12,12 +12,16 @@ export class Card {
     this.counters = {};
     this.summoningSick = false;
     this.markedForDeath = false;
+    // Runtime-granted state (until end of turn unless explicitly persistent).
+    this.grantedKeywords = new Set();
+    this.grantedPower = 0;
+    this.grantedToughness = 0;
   }
 
-  // Single API for keyword lookup. Today only checks static def.keywords;
-  // when granted-keyword support lands, this also reads a runtime set.
+  // Single API for keyword lookup. Checks both the static card definition and
+  // any runtime-granted keywords (Touch of Zot, Cavern Drake's attack trigger).
   hasKeyword(name) {
-    return this.def.keywords?.includes(name) ?? false;
+    return (this.def.keywords?.includes(name) ?? false) || this.grantedKeywords.has(name);
   }
 
   get name() { return this.def.name; }
@@ -29,6 +33,14 @@ export class Card {
   get isEnchantment() { return this.def.type === 'enchantment'; }
   get basePower() { return this.def.power ?? 0; }
   get baseToughness() { return this.def.toughness ?? 0; }
-  get power() { return this.basePower + (this.counters['+1/+1'] ?? 0); }
-  get toughness() { return this.baseToughness + (this.counters['+1/+1'] ?? 0); }
+  get power() {
+    return this.basePower
+      + (this.counters['+1/+1'] ?? 0)
+      + this.grantedPower;
+  }
+  get toughness() {
+    return this.baseToughness
+      + (this.counters['+1/+1'] ?? 0)
+      + this.grantedToughness;
+  }
 }

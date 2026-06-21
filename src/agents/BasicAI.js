@@ -82,8 +82,10 @@ export class BasicAI extends Agent {
       return { type: 'cast', card: target };
     }
 
-    // 4. Otherwise tap a land — one per priority iteration.
-    const land = me.battlefield.cards.find(c => c.isLand && !c.tapped);
+    // 4. Otherwise tap a land that helps pay for the target. Picks a land
+    //    matching a colored deficit when possible; falls back to any untapped
+    //    land for generic mana.
+    const land = pickLandToTap(me, target);
     if (land) return { type: 'tap_for_mana', card: land };
 
     return { type: 'pass' };
@@ -109,6 +111,17 @@ export class BasicAI extends Agent {
       if (damaged.length > 0) {
         damaged.sort((a, b) => b.damage - a.damage);
         return damaged[0];
+      }
+    }
+    // For toughness-reducing modifiers, pick a killable enemy creature.
+    if (matchingEffect?.id === 'modify_stats' && (matchingEffect.toughness ?? 0) < 0) {
+      const dT = matchingEffect.toughness;
+      const killable = candidates.filter(t =>
+        !t.isPlayer && t.controller === opp && t.damage >= (t.toughness + dT)
+      );
+      if (killable.length > 0) {
+        killable.sort((a, b) => valueOfCreature(b) - valueOfCreature(a));
+        return killable[0];
       }
     }
 
@@ -233,6 +246,29 @@ function delay(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+// Picks an untapped land to tap that best helps the target's cost. Prefers a
+// land matching a colored shortfall; falls back to any untapped land.
+function pickLandToTap(player, targetCard) {
+  const untapped = player.battlefield.cards.filter(c => c.isLand && !c.tapped);
+  if (untapped.length === 0) return null;
+  const cost = targetCard?.cost;
+  if (!cost) return untapped[0];
+
+  // Find colors where we still need more than we have.
+  for (const color of ['R', 'B']) {
+    const need = cost[color] ?? 0;
+    const have = player.manaPool[color] ?? 0;
+    if (need <= have) continue;
+    const matching = untapped.find(land => {
+      const ability = land.def.abilities?.find(a => a.kind === 'mana');
+      return (ability?.produces?.[color] ?? 0) > 0;
+    });
+    if (matching) return matching;
+  }
+  // No colored deficit — generic mana, any land is fine.
+  return untapped[0];
+}
+
 function potentialPool(player) {
   const pool = { ...player.manaPool };
   for (const c of player.battlefield.cards) {
@@ -275,18 +311,34 @@ function allTargetsAvailable(match, card, controller) {
 // do anything to (e.g., healing an undamaged creature — legal target, wasted cast).
 function hasUsefulTarget(match, effect, controller) {
   for (const p of match.players) {
-    if (isValidTarget(p, effect.target, match, controller) && isUsefulTarget(effect, p)) return true;
+    if (isValidTarget(p, effect.target, match, controller) && isUsefulTarget(effect, p, controller)) return true;
     for (const c of p.battlefield.cards) {
-      if (isValidTarget(c, effect.target, match, controller) && isUsefulTarget(effect, c)) return true;
+      if (isValidTarget(c, effect.target, match, controller) && isUsefulTarget(effect, c, controller)) return true;
     }
   }
   return false;
 }
 
 // Effect-specific "would this target actually benefit from / suffer from this effect?"
-function isUsefulTarget(effect, target) {
+function isUsefulTarget(effect, target, controller) {
   if (effect.id === 'remove_damage') {
     return !target.isPlayer && target.damage > 0;
+  }
+  if (effect.id === 'modify_stats') {
+    if (target.isPlayer) return false;
+    const dT = effect.toughness ?? 0;
+    // Negative toughness change: only worth casting as removal (would kill).
+    if (dT < 0) return target.damage >= (target.toughness + dT);
+    // Positive/zero toughness change: a buff, useful on own creatures.
+    return target.controller === controller;
+  }
+  if (effect.id === 'grant_keywords') {
+    // Granted keywords last only until end of turn, so a summoning-sick
+    // creature can't benefit (it can't attack this turn). Since the AI
+    // doesn't cast on the opponent's turn, blocking isn't a use case either.
+    if (target.isPlayer) return false;
+    if (target.summoningSick) return false;
+    return true;
   }
   return true;
 }

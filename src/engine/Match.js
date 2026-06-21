@@ -76,6 +76,16 @@ export class Match {
 
     this.phase = 'end';
     for (const p of this.players) p.manaPool = emptyPool();
+    // Clear "until end of turn" granted modifiers on every battlefield card.
+    // Damage and tapped state are NOT cleared (damage persists per house rules;
+    // tapped is cleared during the next untap step).
+    for (const p of this.players) {
+      for (const c of p.battlefield.cards) {
+        c.grantedKeywords.clear();
+        c.grantedPower = 0;
+        c.grantedToughness = 0;
+      }
+    }
 
     this.activeIndex = 1 - this.activeIndex;
     if (this.activeIndex === 0) this.turn++;
@@ -299,9 +309,9 @@ export class Match {
       const allDying = [];
       for (const p of this.players) {
         for (const c of p.battlefield.cards) {
-          if (c.isCreature && (
-            (c.toughness > 0 && c.damage >= c.toughness) || c.markedForDeath
-          )) {
+          // A creature dies if damage >= toughness (covers 0/0 too) or
+          // it's marked for death by deathtouch.
+          if (c.isCreature && (c.damage >= c.toughness || c.markedForDeath)) {
             allDying.push(c);
           }
         }
@@ -386,6 +396,9 @@ export class Match {
     card.damage = 0;
     card.markedForDeath = false;
     card.tapped = false;
+    card.grantedKeywords.clear();
+    card.grantedPower = 0;
+    card.grantedToughness = 0;
   }
 
   drawCard(player) {
