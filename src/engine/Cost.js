@@ -59,6 +59,12 @@ export function maxXFromPool(pool, cost) {
   return after < 0 ? -1 : after;
 }
 
+// Total mana value of a cost (sum of generic + all colored). Ignores X.
+export function manaValue(cost) {
+  if (!cost) return 0;
+  return (cost.generic ?? 0) + COLORS.reduce((s, c) => s + (cost[c] ?? 0), 0);
+}
+
 // Formats cost for display: "{X}{2}{R}".
 export function formatCost(cost) {
   if (!cost) return '';

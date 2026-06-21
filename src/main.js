@@ -1,17 +1,11 @@
-import { Match } from './engine/Match.js';
-import { MatchPlayer } from './engine/MatchPlayer.js';
-import { HumanAgent } from './agents/HumanAgent.js';
-import { BasicAI } from './agents/BasicAI.js';
-import { loadDeck } from './decks/parser.js';
-import { BattleView } from './ui/BattleView.js';
+import { SceneManager } from './scenes/SceneManager.js';
+import { BattleScene } from './scenes/BattleScene.js';
+import { DeckEditorScene } from './scenes/DeckEditorScene.js';
+import { initDeckLibrary } from './state/DeckLibrary.js';
 
-const starterRed = await loadDeck('decks/starter_red.txt');
+await initDeckLibrary();
 
-const p1 = new MatchPlayer('Player 1', starterRed, new HumanAgent());
-const p2 = new MatchPlayer('Player 2', starterRed, new BasicAI());
-
-const match = new Match([p1, p2]);
-const view = new BattleView(document.getElementById('app'), match);
-view.mount();
-
-match.start();
+const sm = new SceneManager(document.getElementById('app'));
+sm.register('battle', 'Battle', (root, mgr) => new BattleScene(root, mgr));
+sm.register('decks',  'Decks',  (root, mgr) => new DeckEditorScene(root, mgr));
+sm.switchTo('battle');

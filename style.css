@@ -1,11 +1,56 @@
 body {
   font-family: -apple-system, system-ui, sans-serif;
   margin: 0;
-  padding: 12px;
+  padding: 0;
   background: #1a1a1a;
   color: #ddd;
 }
-#app { max-width: 1280px; margin: 0 auto; }
+#app { max-width: 1280px; margin: 0 auto; padding: 12px; }
+
+#navbar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+#navbar button {
+  background: #333;
+  color: #ddd;
+  border: 1px solid #555;
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 0.95em;
+}
+#navbar button:hover { background: #444; }
+#navbar button.active {
+  background: #c80;
+  color: #1a1a1a;
+  font-weight: bold;
+  border-color: #fa0;
+}
+
+#scene-root { min-height: 70vh; }
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  color: #aaa;
+  font-size: 1em;
+}
+.empty-state button {
+  margin-top: 10px;
+  background: #c80;
+  color: #1a1a1a;
+  border: 1px solid #fa0;
+  padding: 8px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.hint { color: #888; font-size: 0.85em; font-style: italic; padding: 6px; }
 
 .layout {
   display: grid;
@@ -208,6 +253,163 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-weight: bold;
   letter-spacing: 0.05em;
 }
+
+.deck-editor {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 12px;
+}
+
+.deck-list-pane {
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.deck-list {
+  flex: 1;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.deck-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.deck-list-item:hover { background: #353535; }
+.deck-list-item.selected {
+  background: #221e16;
+  border-color: #c80;
+}
+.deck-tags { display: flex; gap: 3px; }
+.tag {
+  display: inline-block;
+  font-size: 0.7em;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+.tag-p { background: #4a4; color: #fff; }
+.tag-o { background: #c44; color: #fff; }
+.deck-list-actions {
+  display: flex;
+  gap: 6px;
+  flex-direction: column;
+}
+.deck-list-actions button {
+  background: #444;
+  color: #ddd;
+  border: 1px solid #555;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+.deck-list-actions button:hover:not(:disabled) { background: #555; }
+.deck-list-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.deck-edit-pane {
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 10px;
+}
+.edit-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #444;
+}
+.edit-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.deck-name-input {
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #555;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 0.95em;
+  width: 240px;
+}
+
+.section { margin-bottom: 12px; }
+.section-label {
+  font-size: 0.75em;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.unsaved-note { color: #fa6; font-style: italic; }
+
+.lib-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 6px;
+  background: #161616;
+  border: 1px dashed #333;
+}
+.lib-card {
+  position: relative;
+  min-width: 88px;
+}
+.lib-card-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #c80;
+  color: #1a1a1a;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.75em;
+  font-weight: bold;
+  min-width: 14px;
+  text-align: center;
+}
+
+.deck-group { margin-bottom: 8px; }
+.group-label {
+  font-size: 0.78em;
+  color: #aaa;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+.deck-entry {
+  font-size: 0.88em;
+  color: #ddd;
+  padding: 1px 6px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #444;
+}
+.edit-actions button {
+  background: #444;
+  color: #eee;
+  border: 1px solid #666;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+.edit-actions button:hover:not(:disabled) { background: #555; }
+.edit-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .card-tooltip {
   position: fixed;

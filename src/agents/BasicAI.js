@@ -67,19 +67,27 @@ export class BasicAI extends Agent {
 
     // 2. Find the highest-cost card we could afford if all our lands were tapped.
     //    Skip targeted spells with no legal targets so we don't fizzle.
+    //    Skip X-mana spells unless we can afford at least X=1 (otherwise we'd
+    //    cast for X=0, which does nothing for our current X-scaling cards).
     const potential = potentialPool(me);
     const playable = me.hand.cards
       .filter(c => !c.isLand)
       .filter(c => canPayCost(potential, c.cost))
       .filter(c => allTargetsAvailable(match, c, me))
+      .filter(c => affordsMeaningfulX(c, potential))
       .sort((a, b) => totalManaCost(b.cost) - totalManaCost(a.cost));
 
     if (playable.length === 0) return { type: 'pass' };
     const target = playable[0];
 
-    // 3. If we already have enough mana, cast it.
+    // 3. If we already have enough mana, cast it — BUT for X-mana spells, tap
+    //    any remaining lands first so X is as large as possible.
     if (canPayCost(me.manaPool, target.cost)) {
-      return { type: 'cast', card: target };
+      const isXMana = target.cost?.x === 'mana';
+      const hasUntapped = me.battlefield.cards.some(c => c.isLand && !c.tapped);
+      if (!(isXMana && hasUntapped)) {
+        return { type: 'cast', card: target };
+      }
     }
 
     // 4. Otherwise tap a land that helps pay for the target. Picks a land
@@ -123,6 +131,13 @@ export class BasicAI extends Agent {
         return killable[0];
       }
     }
+    // For destroy_target: only target opponent permanents. If none exist,
+    // fizzle (returning null aborts the cast cleanly before mana is paid).
+    if (effect?.id === 'destroy_target') {
+      const hostile = candidates.filter(t => !t.isPlayer && t.controller === opp);
+      if (hostile.length > 0) return hostile[0];
+      return null;
+    }
     // For grant_keywords: prefer friendly creatures that don't already have all
     // the granted keywords. Among those, prefer current attackers (tapped,
     // non-sick) since the grant lasts only until end of turn.
@@ -151,6 +166,10 @@ export class BasicAI extends Agent {
         );
       }
       if (enemies.includes(opp)) return opp;
+      // Non-creature enemy permanents (lands, artifacts, enchantments) — e.g.,
+      // Conflagration / Destroy Artifact. Hit one of theirs, not ours.
+      const otherEnemies = enemies.filter(t => !t.isPlayer);
+      if (otherEnemies.length > 0) return otherEnemies[0];
     }
 
     // Fall through: must be a friendly target (buff/heal-style filter).
@@ -304,6 +323,14 @@ function totalManaCost(cost) {
   return total;
 }
 
+// For X-mana cards, returns true if the potential pool covers base + X=1.
+// X=0 casts of our scaling-effect cards do nothing, so skip them.
+function affordsMeaningfulX(card, potential) {
+  if (card.cost?.x !== 'mana') return true;
+  const withOneX = { ...card.cost, generic: (card.cost.generic ?? 0) + 1 };
+  return canPayCost(potential, withOneX);
+}
+
 function valueOfCreature(card) {
   if (!card.isCreature) return 0;
   let v = card.power + card.toughness;
@@ -354,6 +381,10 @@ function isUsefulTarget(effect, target, controller) {
     if (target.isPlayer) return false;
     if (target.summoningSick) return false;
     return true;
+  }
+  if (effect.id === 'destroy_target') {
+    // Only worth casting against opponent permanents.
+    return !target.isPlayer && target.controller !== controller;
   }
   return true;
 }
