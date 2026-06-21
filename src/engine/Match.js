@@ -1,4 +1,3 @@
-import { EventBus } from './EventBus.js';
 import { Stack } from './Stack.js';
 import { Zone } from '../cards/Zone.js';
 import { isValidTarget } from './Targeting.js';
@@ -13,7 +12,6 @@ export class Match {
     this.activeIndex = 0;
     this.turn = 1;
     this.phase = 'pregame';
-    this.events = new EventBus();
     this.gameOver = false;
     this.winner = null;
     this.log = [];

@@ -34,7 +34,7 @@ export class HumanAgent extends Agent {
   }
 
   chooseXValue(match, card, max) {
-    return this._request('xvalue', { card, max, source: card, kind: card.cost?.x });
+    return this._request('xvalue', { card, max, source: card, costKind: card.cost?.x });
   }
 
   declareAttackers(match) {

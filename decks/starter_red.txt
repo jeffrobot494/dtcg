@@ -4,9 +4,9 @@
 
 9 mountain
 9 swamp
-6 mountain_warrior
+6 big_man
 2 serpent_of_the_vale
-4 immolation_shaman
+4 immolation_deathshaman
 4 boil
-2 erupt
+4 share_blood
 4 beseech_the_shadows

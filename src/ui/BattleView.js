@@ -1,9 +1,7 @@
 import { isValidTarget, describeFilter } from '../engine/Targeting.js';
 import { canBlock } from '../engine/Combat.js';
 import { canPayCost, formatCost, formatPool } from '../engine/Cost.js';
-import { describeCard } from './cardText.js';
-
-const TOOLTIP_DELAY_MS = 500;
+import { CardTooltip } from './CardTooltip.js';
 
 // BattleView renders the entire battle in plain HTML and routes clicks to
 // whichever HumanAgent has a pending request. All decisions flow through the
@@ -16,11 +14,7 @@ export class BattleView {
     this.selectedBlocker = null;
     this.blocks = [];
 
-    // Tooltip lives in document.body so it isn't wiped by render().
-    this.tooltip = document.createElement('div');
-    this.tooltip.className = 'card-tooltip hidden';
-    document.body.appendChild(this.tooltip);
-    this.tooltipTimer = null;
+    this.tooltip = new CardTooltip();
 
     match.onUpdate = () => this.render();
     for (const p of match.players) {
@@ -33,7 +27,7 @@ export class BattleView {
   // ---------- rendering ----------
 
   render() {
-    this._hideTooltip();
+    this.tooltip.hide();
     const m = this.match;
     const html = [];
 
@@ -181,7 +175,7 @@ export class BattleView {
       case 'priority':  return 'choose an action (or pass)';
       case 'target':    return `choose ${describeFilter(req.filter)} for ${this.escape(req.source?.name ?? '')}`;
       case 'xvalue': {
-        const unit = req.kind === 'life' ? 'X life' : 'X';
+        const unit = req.costKind === 'life' ? 'X life' : 'X';
         return `choose ${unit} for ${this.escape(req.card?.name ?? '')} (max ${req.max})`;
       }
       case 'attackers': return 'declare attackers';
@@ -210,7 +204,7 @@ export class BattleView {
           <button data-act="cancel-target">Cancel</button>
           <small>Click a highlighted target.</small>`;
       case 'xvalue': {
-        const hint = req.kind === 'life'
+        const hint = req.costKind === 'life'
           ? 'X life will be paid in addition to the mana cost.'
           : 'X mana adds to the cost.';
         return `
@@ -266,8 +260,11 @@ export class BattleView {
   attachHandlers() {
     this.root.querySelectorAll('.card').forEach(el => {
       el.onclick = () => this.onCardClick(parseInt(el.dataset.iid, 10));
-      el.onmouseenter = () => this._scheduleTooltip(el);
-      el.onmouseleave = () => this._hideTooltip();
+      el.onmouseenter = () => {
+        const found = this.findCard(parseInt(el.dataset.iid, 10));
+        if (found) this.tooltip.scheduleShow(el, found.card.def);
+      };
+      el.onmouseleave = () => this.tooltip.hide();
     });
     this.root.querySelectorAll('.player-header[data-player-name]').forEach(el => {
       el.onclick = () => this.onPlayerClick(el.dataset.playerName);
@@ -277,36 +274,6 @@ export class BattleView {
     });
   }
 
-  _scheduleTooltip(cardEl) {
-    this._hideTooltip();
-    this.tooltipTimer = setTimeout(() => {
-      const iid = parseInt(cardEl.dataset.iid, 10);
-      const found = this.findCard(iid);
-      if (!found) return;
-      this.tooltip.innerHTML = describeCard(found.card.def);
-      this.tooltip.classList.remove('hidden');
-
-      // Position below the card, then clamp to viewport.
-      const card = cardEl.getBoundingClientRect();
-      this.tooltip.style.top = `${card.bottom + 6}px`;
-      this.tooltip.style.left = `${card.left}px`;
-      const tt = this.tooltip.getBoundingClientRect();
-      if (tt.bottom > window.innerHeight - 8) {
-        this.tooltip.style.top = `${Math.max(8, card.top - tt.height - 6)}px`;
-      }
-      if (tt.right > window.innerWidth - 8) {
-        this.tooltip.style.left = `${window.innerWidth - tt.width - 8}px`;
-      }
-    }, TOOLTIP_DELAY_MS);
-  }
-
-  _hideTooltip() {
-    if (this.tooltipTimer) {
-      clearTimeout(this.tooltipTimer);
-      this.tooltipTimer = null;
-    }
-    if (this.tooltip) this.tooltip.classList.add('hidden');
-  }
 
   findCard(iid) {
     for (const p of this.match.players) {

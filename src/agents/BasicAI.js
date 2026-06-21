@@ -31,7 +31,7 @@ export class BasicAI extends Agent {
 
   async chooseTarget(match, filter, source) {
     // No delay — sub-decision inside an already-paced cast.
-    return this._pickTarget(match, filter);
+    return this._pickTarget(match, filter, source);
   }
 
   async chooseXValue(match, card, max) {
@@ -89,7 +89,7 @@ export class BasicAI extends Agent {
     return { type: 'pass' };
   }
 
-  _pickTarget(match, filter) {
+  _pickTarget(match, filter, source) {
     const me = this._meIn(match);
     const opp = match.opponentOf(me);
 
@@ -101,6 +101,16 @@ export class BasicAI extends Agent {
       }
     }
     if (candidates.length === 0) return null;
+
+    // For heal-style effects, prefer the most damaged creature.
+    const matchingEffect = source?.def?.effects?.find(e => e.target?.type === filter.type);
+    if (matchingEffect?.id === 'remove_damage') {
+      const damaged = candidates.filter(t => !t.isPlayer && t.damage > 0);
+      if (damaged.length > 0) {
+        damaged.sort((a, b) => b.damage - a.damage);
+        return damaged[0];
+      }
+    }
 
     const enemies = candidates.filter(t => t === opp || t.controller === opp);
     if (enemies.length > 0) {
@@ -256,17 +266,27 @@ function valueOfCreature(card) {
 function allTargetsAvailable(match, card, controller) {
   for (const effect of card.def.effects ?? []) {
     if (!effect.target) continue;
-    if (!hasAnyValidTarget(match, effect.target, controller)) return false;
+    if (!hasUsefulTarget(match, effect, controller)) return false;
   }
   return true;
 }
 
-function hasAnyValidTarget(match, filter, controller) {
+// Like "has any valid target" but also screens out targets the effect couldn't
+// do anything to (e.g., healing an undamaged creature — legal target, wasted cast).
+function hasUsefulTarget(match, effect, controller) {
   for (const p of match.players) {
-    if (isValidTarget(p, filter, match, controller)) return true;
+    if (isValidTarget(p, effect.target, match, controller) && isUsefulTarget(effect, p)) return true;
     for (const c of p.battlefield.cards) {
-      if (isValidTarget(c, filter, match, controller)) return true;
+      if (isValidTarget(c, effect.target, match, controller) && isUsefulTarget(effect, c)) return true;
     }
   }
   return false;
+}
+
+// Effect-specific "would this target actually benefit from / suffer from this effect?"
+function isUsefulTarget(effect, target) {
+  if (effect.id === 'remove_damage') {
+    return !target.isPlayer && target.damage > 0;
+  }
+  return true;
 }
