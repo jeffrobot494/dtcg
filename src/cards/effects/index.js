@@ -7,5 +7,6 @@ import './life.js';
 import './aoe_damage.js';
 import './heal.js';
 import './grant.js';
+import './mana.js';
 
 export { getEffect, defineEffect } from './registry.js';

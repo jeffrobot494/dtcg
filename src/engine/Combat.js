@@ -7,6 +7,16 @@
 // and asks agents for declarations.
 
 export async function runCombatPhase(match) {
+  // --- Beginning of combat ---
+  // Fire phase_begins for "at the beginning of combat" triggers. Only spin
+  // up a priority loop if something actually went on the stack.
+  match.combatStep = 'begin';
+  await match._firePhaseBegins('combat');
+  if (!match.stack.isEmpty) {
+    await match.priorityLoop();
+    if (match.gameOver) { match.combatStep = null; return; }
+  }
+
   // --- Declare attackers ---
   match.combatStep = 'attackers';
   const eligibleAttackers = match.activePlayer.battlefield.cards.filter(

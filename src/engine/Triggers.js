@@ -19,6 +19,9 @@ export function matchesCondition(trigger, source, payload) {
       return payload?.card === source;
     case 'you_control':
       return payload?.card?.controller === source.controller;
+    case 'your_phase':
+      // Fires on the named phase, but only when it's this source's controller's turn.
+      return payload?.player === source.controller && payload?.phase === cond.phase;
     case 'any':
       return true;
   }

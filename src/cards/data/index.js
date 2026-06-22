@@ -21,6 +21,8 @@ import shareBlood from './share_blood.js';
 import touchOfZot from './touch_of_zot.js';
 import immolate from './immolate.js';
 import fireDrake from './fire_drake.js';
+import pox from './pox.js';
+import walkOnCoals from './walk_on_coals.js';
 
 const database = {
   mountain,
@@ -46,6 +48,8 @@ const database = {
   touch_of_zot: touchOfZot,
   immolate,
   fire_drake: fireDrake,
+  pox,
+  walk_on_coals: walkOnCoals,
 };
 
 export function getCardDef(id) {

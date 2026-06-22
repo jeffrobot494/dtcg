@@ -349,7 +349,8 @@ export class BattleView {
         if (affordable) {
           actingPlayer.agent.resolve({ type: 'cast', card });
         }
-      } else if (card.isCreature || card.def.type === 'sorcery') {
+      } else {
+        // Anything else (creature, sorcery, artifact, enchantment) is sorcery speed.
         if (sorcerySpeedOk && affordable) {
           actingPlayer.agent.resolve({ type: 'cast', card });
         }

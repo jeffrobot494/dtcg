@@ -63,6 +63,7 @@ export class Match {
     }
 
     this.phase = 'main1';
+    await this._firePhaseBegins('main1');
     await this.priorityLoop();
     if (this.gameOver) return;
 
@@ -71,10 +72,17 @@ export class Match {
     if (this.gameOver) return;
 
     this.phase = 'main2';
+    await this._firePhaseBegins('main2');
     await this.priorityLoop();
     if (this.gameOver) return;
 
     this.phase = 'end';
+    await this._firePhaseBegins('end');
+    // Only spin a priority loop if a trigger queued something onto the stack.
+    if (!this.stack.isEmpty) {
+      await this.priorityLoop();
+      if (this.gameOver) return;
+    }
     for (const p of this.players) p.manaPool = emptyPool();
     // Clear "until end of turn" granted modifiers on every battlefield card.
     // Damage and tapped state are NOT cleared (damage persists per house rules;
@@ -166,7 +174,9 @@ export class Match {
     if (card.zone !== player.hand) return false;
     if (!canPayCost(player.manaPool, card.cost)) return false;
 
-    const isSorcerySpeed = card.isCreature || card.def.type === 'sorcery';
+    // Anything that's not an instant is sorcery speed (creatures, sorceries,
+    // artifacts, enchantments).
+    const isSorcerySpeed = card.def.type !== 'instant';
     if (isSorcerySpeed) {
       if (player !== this.activePlayer) return false;
       if (!this.stack.isEmpty) return false;
@@ -271,6 +281,8 @@ export class Match {
       this.stackZone.remove(source);
       if (source.def.type === 'instant' || source.def.type === 'sorcery') {
         controller.graveyard.add(source);
+      } else if (source.def.type === 'artifact' || source.def.type === 'enchantment') {
+        controller.battlefield.add(source);
       }
     }
     // Triggered abilities: source stays where it is (battlefield, graveyard, etc.).
@@ -343,6 +355,13 @@ export class Match {
         this.winner = this.opponentOf(p);
       }
     }
+  }
+
+  // Emits a phase_begins event and processes any triggers (e.g., Pox, Walk
+  // on Coals) it queues. Caller decides whether to also run a priority loop.
+  async _firePhaseBegins(phase) {
+    this._queueTriggersForEvent('phase_begins', { phase, player: this.activePlayer });
+    await this._processPendingTriggers();
   }
 
   _queueTriggersForEvent(eventName, payload) {

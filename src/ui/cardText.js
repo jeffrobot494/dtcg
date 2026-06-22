@@ -67,6 +67,12 @@ function describeEffect(eff) {
       return `${describeWho(eff.who)} loses ${eff.amount} life.`;
     case 'gain_life':
       return `${describeWho(eff.who)} gains ${eff.amount} life.`;
+    case 'add_mana': {
+      const parts = Object.entries(eff.mana ?? {})
+        .map(([c, n]) => `{${c}}`.repeat(n))
+        .join('');
+      return `Add ${parts || 'no'} mana.`;
+    }
   }
   return `(unknown effect: ${eff.id})`;
 }
@@ -88,6 +94,16 @@ function describeTriggerPrefix(trig) {
     if (cond === 'self')        return 'When this creature attacks,';
     if (cond === 'you_control') return 'Whenever a creature you control attacks,';
     return 'Whenever a creature attacks,';
+  }
+  if (trig.event === 'phase_begins') {
+    const labels = {
+      upkeep: 'upkeep', draw: 'draw step',
+      main1: 'first main phase', combat: 'combat',
+      main2: 'second main phase', end: 'end step',
+    };
+    const ph = labels[trig.condition?.phase] ?? trig.condition?.phase ?? 'phase';
+    if (cond === 'your_phase') return `At the beginning of your ${ph},`;
+    return `At the beginning of each ${ph},`;
   }
   return `When ${trig.event} (${cond}):`;
 }
