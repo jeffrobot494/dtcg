@@ -3,6 +3,7 @@ import { Zone } from '../cards/Zone.js';
 import { isValidTarget } from './Targeting.js';
 import { getEffect } from '../cards/effects/index.js';
 import { matchesCondition, scopeForEvent } from './Triggers.js';
+import { matchesReplacement, applyReplacement } from './Replacements.js';
 import { runCombatPhase } from './Combat.js';
 import { canPayCost, payCost, maxXFromPool, formatCost, formatPool, emptyPool } from './Cost.js';
 
@@ -202,24 +203,34 @@ export class Match {
       }
     }
 
-    // Gather targets.
+    // Gather targets. Each effect's target slot is an array of picks
+    // (length 1 for normal, length N for X-target effects).
     const effects = card.def.effects ?? [];
     const targets = [];
     for (const effect of effects) {
-      if (effect.target) {
-        const t = await player.agent.chooseTarget(this, effect.target, card, effect);
+      if (!effect.target) {
+        targets.push([null]);
+        continue;
+      }
+      const count = effect.target.count === 'x' ? (xValue ?? 0) : 1;
+      const picks = [];
+      for (let i = 0; i < count; i++) {
+        const t = await player.agent.chooseTarget(this, effect.target, card, effect, picks);
         if (t == null) {
-          this.notify(`${player.name} cancels casting ${card.name}.`);
-          return false;
+          if (picks.length === 0) {
+            this.notify(`${player.name} cancels casting ${card.name}.`);
+            return false;
+          }
+          break;  // proceed with partial picks
         }
         if (!isValidTarget(t, effect.target, this, player)) {
           this.notify(`Invalid target.`);
           return false;
         }
-        targets.push(t);
-      } else {
-        targets.push(null);
+        if (picks.includes(t)) continue;  // skip duplicate
+        picks.push(t);
       }
+      targets.push(picks);
     }
 
     // Pay mana (base, plus X if X is mana) and pay life (if X is life).
@@ -280,20 +291,22 @@ export class Match {
     const effects = ability.effects ?? [];
     const targets = [];
     for (const effect of effects) {
-      if (effect.target) {
-        const t = await player.agent.chooseTarget(this, effect.target, card, effect);
-        if (t == null) {
-          this.notify(`${player.name} cancels activating ${card.name}.`);
-          return false;
-        }
-        if (!isValidTarget(t, effect.target, this, player)) {
-          this.notify(`Invalid target.`);
-          return false;
-        }
-        targets.push(t);
-      } else {
-        targets.push(null);
+      if (!effect.target) {
+        targets.push([null]);
+        continue;
       }
+      const picks = [];
+      const t = await player.agent.chooseTarget(this, effect.target, card, effect, picks);
+      if (t == null) {
+        this.notify(`${player.name} cancels activating ${card.name}.`);
+        return false;
+      }
+      if (!isValidTarget(t, effect.target, this, player)) {
+        this.notify(`Invalid target.`);
+        return false;
+      }
+      picks.push(t);
+      targets.push(picks);
     }
 
     // Pay activation cost: tap source, deduct mana.
@@ -324,15 +337,17 @@ export class Match {
 
     for (let i = 0; i < effects.length; i++) {
       const effectDef = effects[i];
-      const target = targets[i];
-      // Fizzle this effect if its chosen target became invalid.
-      if (effectDef.target && !isValidTarget(target, effectDef.target, this, controller)) {
-        this.notify(`${source.name}'s target is no longer valid.`);
-        continue;
-      }
+      const picks = targets[i] ?? [null];
       const fn = getEffect(effectDef.id);
-      const ctx = { source, controller, target, x: item.x };
-      await fn(this, ctx, effectDef);
+      for (const target of picks) {
+        // Fizzle this iteration if a previously-chosen target became invalid.
+        if (effectDef.target && !isValidTarget(target, effectDef.target, this, controller)) {
+          this.notify(`${source.name}'s target is no longer valid.`);
+          continue;
+        }
+        const ctx = { source, controller, target, x: item.x };
+        await fn(this, ctx, effectDef);
+      }
     }
 
     if (type === 'spell') {
@@ -347,10 +362,22 @@ export class Match {
     this.notify(`${source.name} resolves.`);
   }
 
-  // Single damage primitive — combat and effect-driven damage both route here so
-  // deathtouch and lifelink hook in one place.
+  // Single damage primitive — combat and effect-driven damage both route here.
+  // Replacement effects (e.g., Smokeweaver damage prevention) run first; then
+  // deathtouch and lifelink hook in once damage is finalized.
   dealDamage(source, target, amount) {
     if (amount <= 0 || !target) return;
+
+    // Apply damage replacement effects.
+    const event = { type: 'damage_dealt', source, target, amount };
+    this._applyReplacements(event);
+    const prevented = event.prevented ?? 0;
+    if (prevented > 0) {
+      this.notify(`${prevented} damage to ${target.name} prevented.`);
+    }
+    amount = event.amount;
+    if (amount <= 0) return;
+
     const tags = [];
     if (target.isPlayer) {
       target.life -= amount;
@@ -367,6 +394,21 @@ export class Match {
     }
     const tagText = tags.length ? ` (${tags.join(', ')})` : '';
     this.notify(`${source.name} deals ${amount} to ${target.name}${tagText}.`);
+  }
+
+  // Scans all battlefield cards for replacement effects matching the event,
+  // and applies each (mutating event.amount in place).
+  _applyReplacements(event) {
+    for (const p of this.players) {
+      for (const card of p.battlefield.cards) {
+        const reps = card.def.replacements ?? [];
+        for (const r of reps) {
+          if (matchesReplacement(r, card, event)) {
+            applyReplacement(r, event);
+          }
+        }
+      }
+    }
   }
 
   // SBA + trigger collection. Loops until quiescent so cascading deaths
@@ -406,6 +448,7 @@ export class Match {
       }
 
       await this._processPendingTriggers();
+      this._vanishTokens();
     }
     for (const p of this.players) {
       if (p.life <= 0 && !this.gameOver) {
@@ -444,13 +487,16 @@ export class Match {
       const targets = [];
       let aborted = false;
       for (const effect of effects) {
-        if (effect.target) {
-          const t = await controller.agent.chooseTarget(this, effect.target, source, effect);
-          if (t == null) { aborted = true; break; }
-          targets.push(t);
-        } else {
-          targets.push(null);
+        if (!effect.target) {
+          targets.push([null]);
+          continue;
         }
+        const picks = [];
+        // Triggers don't currently use X-target; treat as single-pick.
+        const t = await controller.agent.chooseTarget(this, effect.target, source, effect, picks);
+        if (t == null) { aborted = true; break; }
+        picks.push(t);
+        targets.push(picks);
       }
       if (aborted) {
         this.notify(`${source.name}'s trigger fizzles.`);
@@ -476,12 +522,26 @@ export class Match {
     card.grantedKeywords.clear();
     card.grantedPower = 0;
     card.grantedToughness = 0;
+    card.counters = {};  // counters reset when leaving the battlefield (MtG rule)
     // Equipment cleanup: clear our own attachment, and detach any equipment
     // that was attached to us.
     card.attachedTo = null;
     if (card.controller?.battlefield) {
       for (const c of card.controller.battlefield.cards) {
         if (c.attachedTo === card) c.attachedTo = null;
+      }
+    }
+  }
+
+  // Tokens cease to exist when they leave the battlefield. They go to graveyard
+  // briefly (so dies-triggers can fire via LKI), then this cleanup removes them.
+  _vanishTokens() {
+    for (const p of this.players) {
+      for (const zoneName of ['graveyard', 'hand', 'exile', 'library']) {
+        const zone = p[zoneName];
+        if (!zone) continue;
+        const tokens = zone.cards.filter(c => c.def?.isToken);
+        for (const t of tokens) zone.remove(t);
       }
     }
   }

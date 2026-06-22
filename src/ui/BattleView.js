@@ -70,7 +70,12 @@ export class BattleView {
         </div>
         ${this.renderZone(p, 'hand')}
         ${this.renderBattlefield(p)}
-        <div class="zone-counts">Library: ${p.library.size} &nbsp;|&nbsp; Graveyard: ${p.graveyard.size}</div>
+        ${p.graveyard.size > 0 ? this.renderCardRow(`graveyard (${p.graveyard.size})`, p.graveyard.cards) : ''}
+        <div class="zone-counts">
+          Library: ${p.library.size}
+          ${p.graveyard.size > 0 ? '' : `&nbsp;|&nbsp; Graveyard: ${p.graveyard.size}`}
+          ${p.exile?.size > 0 ? `&nbsp;|&nbsp; Exile: ${p.exile.size}` : ''}
+        </div>
       </div>
     `;
   }
@@ -254,6 +259,7 @@ export class BattleView {
   isCardTargetable(card) {
     const t = this.pendingTargetRequest();
     if (!t) return false;
+    if (t.req.picks?.includes(card)) return false;  // already picked in multi-target
     return isValidTarget(card, t.req.filter, this.match, t.player);
   }
 

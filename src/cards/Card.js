@@ -49,14 +49,21 @@ export class Card {
   get basePower() { return this.def.power ?? 0; }
   get baseToughness() { return this.def.toughness ?? 0; }
   get power() {
-    let v = this.basePower + (this.counters['+1/+1'] ?? 0) + this.grantedPower;
+    let v = this.basePower
+      + (this.counters['+1/+1'] ?? 0)
+      + (this.counters['+1/+0'] ?? 0)
+      - (this.counters['-1/+1'] ?? 0)
+      + this.grantedPower;
     for (const eq of this._attachedEquipment) {
       v += eq.def.staticBuff?.power ?? 0;
     }
     return v;
   }
   get toughness() {
-    let v = this.baseToughness + (this.counters['+1/+1'] ?? 0) + this.grantedToughness;
+    let v = this.baseToughness
+      + (this.counters['+1/+1'] ?? 0)
+      + (this.counters['-1/+1'] ?? 0)
+      + this.grantedToughness;
     for (const eq of this._attachedEquipment) {
       v += eq.def.staticBuff?.toughness ?? 0;
     }

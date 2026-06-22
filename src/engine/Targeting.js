@@ -17,6 +17,10 @@ const filters = {
     isCreatureOnBattlefield(t) && t.def.color !== 'B',
   land: t => t?.isLand && t.zone?.name === 'battlefield',
   artifact: t => t?.isArtifact && t.zone?.name === 'battlefield',
+  creature_in_graveyard: t =>
+    t?.isCreature && t.zone?.name === 'graveyard' && !t.def.isToken,
+  creature_in_your_graveyard: (t, _m, _f, controller) =>
+    t?.isCreature && t.zone?.name === 'graveyard' && t.owner === controller && !t.def.isToken,
 };
 
 function isPlayer(t) { return t?.isPlayer === true; }
@@ -40,6 +44,8 @@ export function describeFilter(filter) {
     case 'non_black_creature':      return 'target non-black creature';
     case 'land':                    return 'target land';
     case 'artifact':                return 'target artifact';
+    case 'creature_in_graveyard':   return 'target creature card from a graveyard';
+    case 'creature_in_your_graveyard': return 'target creature card from your graveyard';
   }
   return 'target';
 }

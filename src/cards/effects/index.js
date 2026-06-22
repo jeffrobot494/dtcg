@@ -9,5 +9,8 @@ import './heal.js';
 import './grant.js';
 import './mana.js';
 import './attach.js';
+import './exile.js';
+import './tokens.js';
+import './return.js';
 
 export { getEffect, defineEffect } from './registry.js';

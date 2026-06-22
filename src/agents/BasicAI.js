@@ -29,9 +29,9 @@ export class BasicAI extends Agent {
     return action;
   }
 
-  async chooseTarget(match, filter, source, effect) {
+  async chooseTarget(match, filter, source, effect, picks) {
     // No delay — sub-decision inside an already-paced cast.
-    return this._pickTarget(match, filter, source, effect);
+    return this._pickTarget(match, filter, source, effect, picks);
   }
 
   async chooseXValue(match, card, max) {
@@ -141,15 +141,27 @@ export class BasicAI extends Agent {
     return { type: 'pass' };
   }
 
-  _pickTarget(match, filter, source, effect) {
+  _pickTarget(match, filter, source, effect, picks = []) {
     const me = this._meIn(match);
     const opp = match.opponentOf(me);
 
+    // Candidates can live on the battlefield (creatures, lands, etc.) or in
+    // any graveyard (for filters like creature_in_graveyard). Exclude anything
+    // we've already picked in this same X-target collection.
     const candidates = [];
     for (const p of match.players) {
-      if (isValidTarget(p, filter, match, me)) candidates.push(p);
+      if (isValidTarget(p, filter, match, me) && !picks.includes(p)) {
+        candidates.push(p);
+      }
       for (const c of p.battlefield.cards) {
-        if (isValidTarget(c, filter, match, me)) candidates.push(c);
+        if (isValidTarget(c, filter, match, me) && !picks.includes(c)) {
+          candidates.push(c);
+        }
+      }
+      for (const c of p.graveyard.cards) {
+        if (isValidTarget(c, filter, match, me) && !picks.includes(c)) {
+          candidates.push(c);
+        }
       }
     }
     if (candidates.length === 0) return null;
@@ -179,6 +191,32 @@ export class BasicAI extends Agent {
       const hostile = candidates.filter(t => !t.isPlayer && t.controller === opp);
       if (hostile.length > 0) return hostile[0];
       return null;
+    }
+    // For exile-from-graveyard (Press Into Service): prefer opponent's
+    // creature cards (denial), fall back to biggest available card.
+    if (effect?.id === 'exile_target') {
+      const cards = candidates.filter(t => !t.isPlayer && t.isCreature);
+      const oppCards = cards.filter(t => t.owner === opp);
+      const pool = oppCards.length > 0 ? oppCards : cards;
+      if (pool.length === 0) return null;
+      pool.sort((a, b) => valueOfCreature(b) - valueOfCreature(a));
+      return pool[0];
+    }
+    // For exile-and-golem (Honor with Immortality): pick the biggest creature
+    // card anywhere; we'll get a copy of its P/T.
+    if (effect?.id === 'exile_and_golem') {
+      const cards = candidates.filter(t => !t.isPlayer && t.isCreature);
+      if (cards.length === 0) return null;
+      cards.sort((a, b) => valueOfCreature(b) - valueOfCreature(a));
+      return cards[0];
+    }
+    // For return-to-hand / return-to-battlefield: pick the biggest creature
+    // card from our own graveyard (filter already restricts).
+    if (effect?.id === 'return_to_hand' || effect?.id === 'return_to_battlefield') {
+      const own = candidates.filter(t => !t.isPlayer && t.isCreature && t.owner === me);
+      if (own.length === 0) return null;
+      own.sort((a, b) => valueOfCreature(b) - valueOfCreature(a));
+      return own[0];
     }
     // For attach: equip to the biggest friendly creature. The "useful targets"
     // check (isUsefulTarget) has already filtered out the current attachment
@@ -420,6 +458,11 @@ function hasUsefulTarget(match, effect, controller, source) {
   for (const p of match.players) {
     if (isValidTarget(p, effect.target, match, controller) && isUsefulTarget(effect, p, controller, source)) return true;
     for (const c of p.battlefield.cards) {
+      if (isValidTarget(c, effect.target, match, controller) && isUsefulTarget(effect, c, controller, source)) return true;
+    }
+    // Graveyard cards can also be targets (Press Into Service, Honor with
+    // Immortality, Come Home, Immortality).
+    for (const c of p.graveyard.cards) {
       if (isValidTarget(c, effect.target, match, controller) && isUsefulTarget(effect, c, controller, source)) return true;
     }
   }

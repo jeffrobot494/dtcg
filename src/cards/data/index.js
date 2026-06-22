@@ -27,6 +27,11 @@ import fireMaster from './fire_master.js';
 import ancestralArmor from './ancestral_armor.js';
 import aunaratha from './aunaratha.js';
 import staffOfPain from './staff_of_pain.js';
+import pressIntoService from './press_into_service.js';
+import honorWithImmortality from './honor_with_immortality.js';
+import comeHome from './come_home.js';
+import immortality from './immortality.js';
+import smokeweaver from './smokeweaver.js';
 
 const database = {
   mountain,
@@ -58,6 +63,11 @@ const database = {
   ancestral_armor: ancestralArmor,
   aunaratha,
   staff_of_pain: staffOfPain,
+  press_into_service: pressIntoService,
+  honor_with_immortality: honorWithImmortality,
+  come_home: comeHome,
+  immortality,
+  smokeweaver,
 };
 
 export function getCardDef(id) {

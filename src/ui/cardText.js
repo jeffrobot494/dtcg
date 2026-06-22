@@ -36,6 +36,7 @@ export function describeCard(def) {
   for (const eff of def.effects ?? [])    rules.push(describeEffect(eff));
   for (const trig of def.triggers ?? [])  rules.push(describeTrigger(trig));
   for (const ab of def.abilities ?? [])   rules.push(describeAbility(ab));
+  for (const rep of def.replacements ?? []) rules.push(describeReplacement(rep));
   if (def.partial) {
     rules.push('<em style="color:#fa6">(partial implementation)</em>');
   }
@@ -82,6 +83,29 @@ function describeEffect(eff) {
         .join('');
       return `Add ${parts || 'no'} mana.`;
     }
+    case 'exile_target': {
+      const count = eff.target?.count === 'x' ? 'X' : '';
+      return `Exile ${count ? count + ' ' : ''}${describeFilter(eff.target)}${count ? 's' : ''}.`;
+    }
+    case 'exile_and_golem':
+      return `Exile ${describeFilter(eff.target)} and create a golem (a copy with the same power and toughness but no abilities).`;
+    case 'create_tokens': {
+      const n = describeAmount(eff.count);
+      const t = eff.template ?? {};
+      const stats = t.power != null ? ` ${t.power}/${t.toughness}` : '';
+      return `Create ${n}${stats} ${t.name}${n === 'X' || (typeof n === 'number' && n !== 1) ? 's' : ''}.`;
+    }
+    case 'return_to_hand': {
+      const count = eff.target?.count === 'x' ? 'X ' : '';
+      return `Return ${count}${describeFilter(eff.target)} to ${count ? 'your hand' : "its owner's hand"}.`;
+    }
+    case 'return_to_battlefield': {
+      let s = `Return ${describeFilter(eff.target)} to the battlefield`;
+      if (eff.counter && eff.amount) {
+        s += ` with ${eff.amount} ${eff.counter} counter`;
+      }
+      return s + '.';
+    }
   }
   return `(unknown effect: ${eff.id})`;
 }
@@ -115,6 +139,19 @@ function describeTriggerPrefix(trig) {
     return `At the beginning of each ${ph},`;
   }
   return `When ${trig.event} (${cond}):`;
+}
+
+function describeReplacement(rep) {
+  if (rep.event === 'damage_dealt') {
+    let prefix = 'When damage would be dealt';
+    if (rep.condition?.type === 'damage_to_you_control') {
+      prefix = 'Whenever a source would deal damage to a creature you control';
+    }
+    if (rep.modify?.type === 'reduce_damage') {
+      return `${prefix}, prevent ${rep.modify.amount} of that damage.`;
+    }
+  }
+  return '(unknown replacement effect)';
 }
 
 function describeAbility(ab) {

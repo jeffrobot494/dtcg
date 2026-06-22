@@ -29,8 +29,8 @@ export class HumanAgent extends Agent {
     return this._request('priority');
   }
 
-  chooseTarget(match, filter, source, effect) {
-    return this._request('target', { filter, source, effect });
+  chooseTarget(match, filter, source, effect, picks) {
+    return this._request('target', { filter, source, effect, picks });
   }
 
   chooseXValue(match, card, max) {
