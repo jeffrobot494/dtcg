@@ -109,8 +109,31 @@ function describeTriggerPrefix(trig) {
 }
 
 function describeAbility(ab) {
-  if (ab.kind === 'mana') return `{T}: Add ${ab.produces?.mana ?? 1} mana.`;
-  return '(activated ability)';
+  if (ab.kind === 'mana') {
+    const produced = Object.entries(ab.produces ?? {})
+      .map(([c, n]) => `{${c}}`.repeat(n))
+      .join('');
+    return `${formatActivationCost(ab.cost)}: Add ${produced || '?'}.`;
+  }
+  if (ab.kind === 'activated') {
+    const costTxt = formatActivationCost(ab.cost);
+    const effectsTxt = (ab.effects ?? []).map(describeEffect).join(' ');
+    return `${costTxt}: ${effectsTxt}`;
+  }
+  return '(unknown ability)';
+}
+
+function formatActivationCost(cost) {
+  if (!cost) return '0';
+  const parts = [];
+  if (cost.mana) parts.push(formatCostInline(cost.mana));
+  if (cost.tap) parts.push('{T}');
+  return parts.join(', ') || '0';
+}
+
+function formatCostInline(manaCost) {
+  // Like formatCost from Cost.js, but reuse to keep one source of truth.
+  return formatCost(manaCost);
 }
 
 function describeFilter(filter) {

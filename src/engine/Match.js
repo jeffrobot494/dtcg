@@ -139,6 +139,7 @@ export class Match {
       case 'play_land':       return this._actionPlayLand(player, action.card);
       case 'tap_for_mana':    return this._actionTapForMana(player, action.card);
       case 'cast':            return await this._actionCast(player, action.card);
+      case 'activate':        return await this._actionActivate(player, action.card, action.abilityIndex ?? 0);
     }
     return false;
   }
@@ -250,6 +251,63 @@ export class Match {
       const xText = card.cost?.x === 'mana' ? ` {X=${xValue}}` : '';
       this.notify(`${player.name} casts ${card.name}${xText}${this._describeTargets(targets)} (paid ${formatCost(effectiveCost)}).`);
     }
+    return true;
+  }
+
+  // Predicate: can `player` legally pay the activation cost and meet timing
+  // restrictions for `ability` on `card` right now?
+  canActivate(card, ability, player) {
+    if (!ability || ability.kind !== 'activated') return false;
+    if (card.zone?.name !== 'battlefield') return false;
+    if (card.controller !== player) return false;
+    if (ability.cost?.tap && card.tapped) return false;
+    // Summoning sickness blocks tap costs on creatures (MtG rule 302.1).
+    if (ability.cost?.tap && card.isCreature && card.summoningSick) return false;
+    if (ability.cost?.mana && !canPayCost(player.manaPool, ability.cost.mana)) return false;
+    if (ability.speed === 'sorcery') {
+      if (player !== this.activePlayer) return false;
+      if (!this.stack.isEmpty) return false;
+      if (this.phase !== 'main1' && this.phase !== 'main2') return false;
+    }
+    return true;
+  }
+
+  async _actionActivate(player, card, abilityIndex) {
+    const ability = card.def.abilities?.[abilityIndex];
+    if (!this.canActivate(card, ability, player)) return false;
+
+    // Gather targets (cancellation here is free — no cost has been paid).
+    const effects = ability.effects ?? [];
+    const targets = [];
+    for (const effect of effects) {
+      if (effect.target) {
+        const t = await player.agent.chooseTarget(this, effect.target, card, effect);
+        if (t == null) {
+          this.notify(`${player.name} cancels activating ${card.name}.`);
+          return false;
+        }
+        if (!isValidTarget(t, effect.target, this, player)) {
+          this.notify(`Invalid target.`);
+          return false;
+        }
+        targets.push(t);
+      } else {
+        targets.push(null);
+      }
+    }
+
+    // Pay activation cost: tap source, deduct mana.
+    if (ability.cost?.tap) card.tapped = true;
+    if (ability.cost?.mana) payCost(player.manaPool, ability.cost.mana);
+
+    this.stack.push({
+      type: 'activated_ability',
+      source: card,
+      controller: player,
+      targets,
+      effects,
+    });
+    this.notify(`${player.name} activates ${card.name}'s ability${this._describeTargets(targets)}.`);
     return true;
   }
 

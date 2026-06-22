@@ -23,6 +23,7 @@ import immolate from './immolate.js';
 import fireDrake from './fire_drake.js';
 import pox from './pox.js';
 import walkOnCoals from './walk_on_coals.js';
+import fireMaster from './fire_master.js';
 
 const database = {
   mountain,
@@ -50,6 +51,7 @@ const database = {
   fire_drake: fireDrake,
   pox,
   walk_on_coals: walkOnCoals,
+  fire_master: fireMaster,
 };
 
 export function getCardDef(id) {

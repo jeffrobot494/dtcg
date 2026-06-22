@@ -137,10 +137,15 @@ export class BattleView {
       const arrow = targetsTxt ? ` → ${this.escape(targetsTxt)}` : '';
       const isTop = i === top;
       const xLabel = item.x ? ` {X=${item.x}}` : '';
-      const label = item.type === 'triggered_ability'
+      const isAbility = item.type === 'triggered_ability' || item.type === 'activated_ability';
+      const label = isAbility
         ? `${this.escape(item.source.name)}'s ability`
         : `${this.escape(item.source.name)}${xLabel}`;
-      const tag = item.type === 'triggered_ability' ? '<span class="stack-tag">TRIGGER</span> ' : '';
+      const tag = item.type === 'triggered_ability'
+        ? '<span class="stack-tag tag-trigger">TRIGGER</span> '
+        : item.type === 'activated_ability'
+        ? '<span class="stack-tag tag-ability">ABILITY</span> '
+        : '';
       return `
         <div class="stack-item${isTop ? ' top' : ''}">
           ${tag}<span class="stack-card">${label}</span>
@@ -358,6 +363,17 @@ export class BattleView {
     } else if (card.zone === actingPlayer.battlefield) {
       if (card.isLand && !card.tapped) {
         actingPlayer.agent.resolve({ type: 'tap_for_mana', card });
+        return;
+      }
+      // Activated abilities: activate the first one the player can afford.
+      const abilities = card.def.abilities ?? [];
+      for (let i = 0; i < abilities.length; i++) {
+        const ab = abilities[i];
+        if (ab.kind !== 'activated') continue;
+        if (m.canActivate(card, ab, actingPlayer)) {
+          actingPlayer.agent.resolve({ type: 'activate', card, abilityIndex: i });
+          return;
+        }
       }
     }
   }

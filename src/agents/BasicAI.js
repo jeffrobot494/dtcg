@@ -65,6 +65,18 @@ export class BasicAI extends Agent {
       if (land) return { type: 'play_land', card: land };
     }
 
+    // 1.5. Activate any useful, affordable ability on our battlefield.
+    for (const c of me.battlefield.cards) {
+      const abilities = c.def.abilities ?? [];
+      for (let i = 0; i < abilities.length; i++) {
+        const ab = abilities[i];
+        if (ab.kind !== 'activated') continue;
+        if (!match.canActivate(c, ab, me)) continue;
+        if (!abilityHasUsefulTargets(match, ab, me)) continue;
+        return { type: 'activate', card: c, abilityIndex: i };
+      }
+    }
+
     // 2. Find the highest-cost card we could afford if all our lands were tapped.
     //    Skip targeted spells with no legal targets so we don't fizzle.
     //    Skip X-mana spells unless we can afford at least X=1 (otherwise we'd
@@ -343,6 +355,15 @@ function valueOfCreature(card) {
 
 function allTargetsAvailable(match, card, controller) {
   for (const effect of card.def.effects ?? []) {
+    if (!effect.target) continue;
+    if (!hasUsefulTarget(match, effect, controller)) return false;
+  }
+  return true;
+}
+
+// Same idea as allTargetsAvailable but for activated-ability effects.
+function abilityHasUsefulTargets(match, ability, controller) {
+  for (const effect of ability.effects ?? []) {
     if (!effect.target) continue;
     if (!hasUsefulTarget(match, effect, controller)) return false;
   }

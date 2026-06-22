@@ -245,7 +245,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .stack-tag {
   display: inline-block;
   font-size: 0.65em;
-  background: #8a4;
   color: #1a1a1a;
   padding: 1px 5px;
   border-radius: 2px;
@@ -253,6 +252,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-weight: bold;
   letter-spacing: 0.05em;
 }
+.stack-tag.tag-trigger { background: #8a4; }
+.stack-tag.tag-ability { background: #68c; }
 
 .deck-editor {
   display: grid;
