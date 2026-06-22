@@ -164,6 +164,12 @@ body {
   font-style: italic;
   margin-top: 2px;
 }
+.card-attached {
+  font-size: 0.7em;
+  color: #fa6;
+  font-style: italic;
+  margin-top: 2px;
+}
 
 .zone-counts {
   font-size: 0.75em;

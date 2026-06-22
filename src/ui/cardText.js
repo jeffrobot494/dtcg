@@ -21,6 +21,15 @@ export function describeCard(def) {
   if (def.cost?.x === 'life') {
     rules.push('Additional cost: pay X life.');
   }
+  if (def.staticBuff) {
+    const p = def.staticBuff.power ?? 0, t = def.staticBuff.toughness ?? 0;
+    const pSign = p >= 0 ? '+' : '', tSign = t >= 0 ? '+' : '';
+    let line = `Equipped creature gets ${pSign}${p}/${tSign}${t}`;
+    if (def.staticBuff.keywords?.length) {
+      line += ` and gains ${def.staticBuff.keywords.map(capitalize).join(', ')}`;
+    }
+    rules.push(line + '.');
+  }
   if (def.keywords?.length) {
     rules.push(def.keywords.map(capitalize).join(', '));
   }
@@ -116,6 +125,10 @@ function describeAbility(ab) {
     return `${formatActivationCost(ab.cost)}: Add ${produced || '?'}.`;
   }
   if (ab.kind === 'activated') {
+    // Special-case "Equip N": a sole attach effect renders as "Equip {N}".
+    if (ab.effects?.length === 1 && ab.effects[0].id === 'attach') {
+      return `Equip ${formatActivationCost(ab.cost)}`;
+    }
     const costTxt = formatActivationCost(ab.cost);
     const effectsTxt = (ab.effects ?? []).map(describeEffect).join(' ');
     return `${costTxt}: ${effectsTxt}`;

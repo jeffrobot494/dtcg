@@ -123,6 +123,9 @@ export class BattleView {
     if (card.def.keywords?.length) {
       parts.push(`<div class="card-keywords">${card.def.keywords.join(', ')}</div>`);
     }
+    if (card.attachedTo) {
+      parts.push(`<div class="card-attached">→ ${this.escape(card.attachedTo.name)}</div>`);
+    }
     return `<div class="${classes.join(' ')}" data-iid="${card.iid}">${parts.join('')}</div>`;
   }
 

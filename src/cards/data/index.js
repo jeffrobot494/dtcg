@@ -24,6 +24,9 @@ import fireDrake from './fire_drake.js';
 import pox from './pox.js';
 import walkOnCoals from './walk_on_coals.js';
 import fireMaster from './fire_master.js';
+import ancestralArmor from './ancestral_armor.js';
+import aunaratha from './aunaratha.js';
+import staffOfPain from './staff_of_pain.js';
 
 const database = {
   mountain,
@@ -52,6 +55,9 @@ const database = {
   pox,
   walk_on_coals: walkOnCoals,
   fire_master: fireMaster,
+  ancestral_armor: ancestralArmor,
+  aunaratha,
+  staff_of_pain: staffOfPain,
 };
 
 export function getCardDef(id) {

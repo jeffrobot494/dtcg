@@ -8,5 +8,6 @@ import './aoe_damage.js';
 import './heal.js';
 import './grant.js';
 import './mana.js';
+import './attach.js';
 
 export { getEffect, defineEffect } from './registry.js';

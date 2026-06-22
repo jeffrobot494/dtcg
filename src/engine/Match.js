@@ -476,6 +476,14 @@ export class Match {
     card.grantedKeywords.clear();
     card.grantedPower = 0;
     card.grantedToughness = 0;
+    // Equipment cleanup: clear our own attachment, and detach any equipment
+    // that was attached to us.
+    card.attachedTo = null;
+    if (card.controller?.battlefield) {
+      for (const c of card.controller.battlefield.cards) {
+        if (c.attachedTo === card) c.attachedTo = null;
+      }
+    }
   }
 
   drawCard(player) {

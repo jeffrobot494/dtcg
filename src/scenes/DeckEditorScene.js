@@ -101,6 +101,13 @@ export class DeckEditorScene {
     this.render();
   }
 
+  _clear() {
+    if (!this.workingCopy || this.workingCopy.cards.length === 0) return;
+    if (!confirm('Remove all cards from this deck?')) return;
+    this.workingCopy.cards = [];
+    this.render();
+  }
+
   _newDeck() {
     if (!this._confirmDiscard()) return;
     const deck = DeckLibrary.create('Untitled');
@@ -199,6 +206,7 @@ export class DeckEditorScene {
       <div class="edit-actions">
         <button data-act="save" ${unsaved ? '' : 'disabled'}>Save</button>
         <button data-act="discard" ${unsaved ? '' : 'disabled'}>Discard changes</button>
+        <button data-act="clear" ${total > 0 ? '' : 'disabled'}>Clear all cards</button>
       </div>
     `;
   }
@@ -280,6 +288,7 @@ export class DeckEditorScene {
     get('delete-deck')?.addEventListener('click', () => this._deleteSelected());
     get('save')?.addEventListener('click', () => this._save());
     get('discard')?.addEventListener('click', () => this._discard());
+    get('clear')?.addEventListener('click', () => this._clear());
 
     const nameInput = get('rename');
     if (nameInput) {

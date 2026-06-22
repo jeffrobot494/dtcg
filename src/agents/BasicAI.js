@@ -72,40 +72,70 @@ export class BasicAI extends Agent {
         const ab = abilities[i];
         if (ab.kind !== 'activated') continue;
         if (!match.canActivate(c, ab, me)) continue;
-        if (!abilityHasUsefulTargets(match, ab, me)) continue;
+        if (!abilityHasUsefulTargets(match, ab, me, c)) continue;
         return { type: 'activate', card: c, abilityIndex: i };
       }
     }
 
-    // 2. Find the highest-cost card we could afford if all our lands were tapped.
-    //    Skip targeted spells with no legal targets so we don't fizzle.
-    //    Skip X-mana spells unless we can afford at least X=1 (otherwise we'd
-    //    cast for X=0, which does nothing for our current X-scaling cards).
+    // 2. Build "playable" list = spells we could cast + activations we could
+    //    fire if all our lands were tapped. Sort by mana value (highest first)
+    //    and pick a target. This unification ensures AI taps toward activated
+    //    abilities (e.g., equip) even when the hand has nothing to cast.
     const potential = potentialPool(me);
-    const playable = me.hand.cards
+
+    const spellOptions = me.hand.cards
       .filter(c => !c.isLand)
       .filter(c => canPayCost(potential, c.cost))
       .filter(c => allTargetsAvailable(match, c, me))
       .filter(c => affordsMeaningfulX(c, potential))
-      .sort((a, b) => totalManaCost(b.cost) - totalManaCost(a.cost));
+      .map(c => ({ kind: 'cast', card: c, cost: c.cost, mv: totalManaCost(c.cost) }));
+
+    const activationOptions = [];
+    for (const c of me.battlefield.cards) {
+      const abilities = c.def.abilities ?? [];
+      for (let i = 0; i < abilities.length; i++) {
+        const ab = abilities[i];
+        if (ab.kind !== 'activated') continue;
+        // Tap-only (no mana) abilities are handled by step 1.5; if step 1.5
+        // didn't fire it, conditions (sickness, tapped, etc.) aren't met.
+        if (!ab.cost?.mana) continue;
+        if (!canPayCost(potential, ab.cost.mana)) continue;
+        if (ab.speed === 'sorcery') {
+          if (me !== match.activePlayer) continue;
+          if (!match.stack.isEmpty) continue;
+          if (match.phase !== 'main1' && match.phase !== 'main2') continue;
+        }
+        if (!abilityHasUsefulTargets(match, ab, me, c)) continue;
+        activationOptions.push({
+          kind: 'activate', card: c, abilityIndex: i,
+          cost: ab.cost.mana, mv: totalManaCost(ab.cost.mana),
+        });
+      }
+    }
+
+    const playable = [...spellOptions, ...activationOptions]
+      .sort((a, b) => b.mv - a.mv);
 
     if (playable.length === 0) return { type: 'pass' };
     const target = playable[0];
 
-    // 3. If we already have enough mana, cast it — BUT for X-mana spells, tap
+    // 3. If we have enough mana RIGHT NOW, do it — but for X-mana spells, tap
     //    any remaining lands first so X is as large as possible.
     if (canPayCost(me.manaPool, target.cost)) {
-      const isXMana = target.cost?.x === 'mana';
-      const hasUntapped = me.battlefield.cards.some(c => c.isLand && !c.tapped);
-      if (!(isXMana && hasUntapped)) {
-        return { type: 'cast', card: target };
+      if (target.kind === 'cast') {
+        const isXMana = target.cost?.x === 'mana';
+        const hasUntapped = me.battlefield.cards.some(c => c.isLand && !c.tapped);
+        if (!(isXMana && hasUntapped)) {
+          return { type: 'cast', card: target.card };
+        }
+      } else {
+        return { type: 'activate', card: target.card, abilityIndex: target.abilityIndex };
       }
     }
 
-    // 4. Otherwise tap a land that helps pay for the target. Picks a land
-    //    matching a colored deficit when possible; falls back to any untapped
-    //    land for generic mana.
-    const land = pickLandToTap(me, target);
+    // 4. Otherwise tap a land toward the target's cost.
+    const fakeCard = target.kind === 'cast' ? target.card : { cost: target.cost };
+    const land = pickLandToTap(me, fakeCard);
     if (land) return { type: 'tap_for_mana', card: land };
 
     return { type: 'pass' };
@@ -149,6 +179,19 @@ export class BasicAI extends Agent {
       const hostile = candidates.filter(t => !t.isPlayer && t.controller === opp);
       if (hostile.length > 0) return hostile[0];
       return null;
+    }
+    // For attach: equip to the biggest friendly creature. The "useful targets"
+    // check (isUsefulTarget) has already filtered out the current attachment
+    // and any creature that isn't a strict improvement — so any candidate
+    // making it here is a valid target.
+    if (effect?.id === 'attach') {
+      const friendly = candidates.filter(t =>
+        !t.isPlayer && t.isCreature && t.controller === me &&
+        t !== source?.attachedTo
+      );
+      if (friendly.length === 0) return null;
+      friendly.sort((a, b) => valueOfCreature(b) - valueOfCreature(a));
+      return friendly[0];
     }
     // For grant_keywords: prefer friendly creatures that don't already have all
     // the granted keywords. Among those, prefer current attackers (tapped,
@@ -356,34 +399,35 @@ function valueOfCreature(card) {
 function allTargetsAvailable(match, card, controller) {
   for (const effect of card.def.effects ?? []) {
     if (!effect.target) continue;
-    if (!hasUsefulTarget(match, effect, controller)) return false;
+    if (!hasUsefulTarget(match, effect, controller, card)) return false;
   }
   return true;
 }
 
 // Same idea as allTargetsAvailable but for activated-ability effects.
-function abilityHasUsefulTargets(match, ability, controller) {
+function abilityHasUsefulTargets(match, ability, controller, source) {
   for (const effect of ability.effects ?? []) {
     if (!effect.target) continue;
-    if (!hasUsefulTarget(match, effect, controller)) return false;
+    if (!hasUsefulTarget(match, effect, controller, source)) return false;
   }
   return true;
 }
 
 // Like "has any valid target" but also screens out targets the effect couldn't
-// do anything to (e.g., healing an undamaged creature — legal target, wasted cast).
-function hasUsefulTarget(match, effect, controller) {
+// do anything useful to (e.g., healing an undamaged creature, re-attaching
+// equipment to the same creature it's already on).
+function hasUsefulTarget(match, effect, controller, source) {
   for (const p of match.players) {
-    if (isValidTarget(p, effect.target, match, controller) && isUsefulTarget(effect, p, controller)) return true;
+    if (isValidTarget(p, effect.target, match, controller) && isUsefulTarget(effect, p, controller, source)) return true;
     for (const c of p.battlefield.cards) {
-      if (isValidTarget(c, effect.target, match, controller) && isUsefulTarget(effect, c, controller)) return true;
+      if (isValidTarget(c, effect.target, match, controller) && isUsefulTarget(effect, c, controller, source)) return true;
     }
   }
   return false;
 }
 
 // Effect-specific "would this target actually benefit from / suffer from this effect?"
-function isUsefulTarget(effect, target, controller) {
+function isUsefulTarget(effect, target, controller, source) {
   if (effect.id === 'remove_damage') {
     return !target.isPlayer && target.damage > 0;
   }
@@ -406,6 +450,18 @@ function isUsefulTarget(effect, target, controller) {
   if (effect.id === 'destroy_target') {
     // Only worth casting against opponent permanents.
     return !target.isPlayer && target.controller !== controller;
+  }
+  if (effect.id === 'attach') {
+    // Re-equipping isn't useful unless we're switching to a strictly more
+    // valuable creature. This must stay in sync with _pickTarget for 'attach'.
+    if (target.isPlayer) return false;
+    if (!target.isCreature) return false;
+    if (target.controller !== controller) return false;
+    if (source?.attachedTo) {
+      if (target === source.attachedTo) return false;
+      if (valueOfCreature(target) <= valueOfCreature(source.attachedTo)) return false;
+    }
+    return true;
   }
   return true;
 }
