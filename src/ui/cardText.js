@@ -108,6 +108,8 @@ function describeEffect(eff) {
     }
     case 'return_self_to_hand':
       return `Return this card to its owner's hand.`;
+    case 'register_scars_trigger':
+      return `At the beginning of your end step, draw cards equal to the amount of combat damage dealt to your opponent this turn.`;
     case 'add_regen_shield':
       return `Regenerate this creature (next time it would die this turn, tap it and remove all damage instead).`;
     case 'incinerate':

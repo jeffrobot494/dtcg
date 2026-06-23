@@ -95,11 +95,11 @@ export async function runCombatPhase(match) {
     const wasBlocked = blockedAttackers.has(attacker);
 
     if (!wasBlocked) {
-      match.dealDamage(attacker, match.nonActivePlayer, attacker.power);
+      match.dealDamage(attacker, match.nonActivePlayer, attacker.power, { isCombat: true });
     } else if (livingBlockers.length === 0) {
       // "Still blocked" — no damage unless trample.
       if (attacker.hasKeyword('trample')) {
-        match.dealDamage(attacker, match.nonActivePlayer, attacker.power);
+        match.dealDamage(attacker, match.nonActivePlayer, attacker.power, { isCombat: true });
       } else {
         match.notify(`${attacker.name} was blocked; all blockers gone — no damage.`);
       }
@@ -119,14 +119,14 @@ export async function runCombatPhase(match) {
         const isLast = i === livingBlockers.length - 1;
         const lethal = deathtouch ? 1 : Math.max(1, b.toughness - b.damage);
         const dmg = (isLast && !trample) ? remaining : Math.min(remaining, lethal);
-        match.dealDamage(attacker, b, dmg);
+        match.dealDamage(attacker, b, dmg, { isCombat: true });
         remaining -= dmg;
       }
       if (trample && remaining > 0) {
-        match.dealDamage(attacker, match.nonActivePlayer, remaining);
+        match.dealDamage(attacker, match.nonActivePlayer, remaining, { isCombat: true });
       }
       for (const b of livingBlockers) {
-        match.dealDamage(b, attacker, b.power);
+        match.dealDamage(b, attacker, b.power, { isCombat: true });
       }
     }
   }

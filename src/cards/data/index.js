@@ -36,6 +36,7 @@ import grandfatherAbas from './grandfather_abas.js';
 import incinerate from './incinerate.js';
 import terror from './terror.js';
 import dishonoredGhoul from './dishonored_ghoul.js';
+import readTheScars from './read_the_scars.js';
 
 const database = {
   mountain,
@@ -76,6 +77,7 @@ const database = {
   incinerate,
   terror,
   dishonored_ghoul: dishonoredGhoul,
+  read_the_scars: readTheScars,
 };
 
 export function getCardDef(id) {

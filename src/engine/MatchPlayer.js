@@ -13,6 +13,9 @@ export class MatchPlayer {
     // Persistent modifier: when true, this player can't gain life for the rest
     // of the game. Never reset.
     this.cantGainLifeForever = false;
+    // Combat damage taken this turn (reset at end of turn). Used by triggers
+    // like Read the Scars.
+    this.combatDamageTakenThisTurn = 0;
 
     this.library = new Zone('library', this, { visibleTo: 'none', layout: 'stack' });
     this.hand = new Zone('hand', this, { visibleTo: 'owner', layout: 'row' });

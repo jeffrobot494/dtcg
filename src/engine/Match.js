@@ -24,6 +24,9 @@ export class Match {
     // Triggers queued by an event but not yet placed on the stack (targets
     // need to be chosen first). Drained by _processPendingTriggers.
     this._pendingTriggers = [];
+    // Delayed triggers registered to fire at a future controller+phase combo.
+    // Entry: { controller, phase, source, computeEffects: () => effects[] }
+    this.pendingDelayedTriggers = [];
   }
 
   get activePlayer() { return this.players[this.activeIndex]; }
@@ -85,6 +88,7 @@ export class Match {
       if (this.gameOver) return;
     }
     for (const p of this.players) p.manaPool = emptyPool();
+    for (const p of this.players) p.combatDamageTakenThisTurn = 0;
     // Clear "until end of turn" granted modifiers on every battlefield card.
     // Damage and tapped state are NOT cleared (damage persists per house rules;
     // tapped is cleared during the next untap step).
@@ -367,7 +371,7 @@ export class Match {
   // Single damage primitive — combat and effect-driven damage both route here.
   // Replacement effects (e.g., Smokeweaver damage prevention) run first; then
   // deathtouch and lifelink hook in once damage is finalized.
-  dealDamage(source, target, amount) {
+  dealDamage(source, target, amount, opts = {}) {
     if (amount <= 0 || !target) return;
 
     // Apply damage replacement effects.
@@ -383,6 +387,7 @@ export class Match {
     const tags = [];
     if (target.isPlayer) {
       target.life -= amount;
+      if (opts.isCombat) target.combatDamageTakenThisTurn += amount;
     } else {
       target.damage += amount;
       // Track the source for "killed by X" triggers (Aunaratha etc.).
@@ -487,6 +492,21 @@ export class Match {
   // on Coals) it queues. Caller decides whether to also run a priority loop.
   async _firePhaseBegins(phase) {
     this._queueTriggersForEvent('phase_begins', { phase, player: this.activePlayer });
+    // Drain delayed triggers scheduled for this controller+phase. Their
+    // computeEffects() runs now so amounts can reflect current state.
+    const remaining = [];
+    for (const dt of this.pendingDelayedTriggers) {
+      if (dt.controller === this.activePlayer && dt.phase === phase) {
+        this._pendingTriggers.push({
+          source: dt.source,
+          trigger: { effects: dt.computeEffects() },
+          payload: {},
+        });
+      } else {
+        remaining.push(dt);
+      }
+    }
+    this.pendingDelayedTriggers = remaining;
     await this._processPendingTriggers();
   }
 

@@ -102,6 +102,11 @@ export class BasicAI extends Agent {
       // Don't cast equipment with no creature to wear it — its only value is
       // the equip ability, and that needs a target.
       .filter(c => c.def.subtype !== 'equipment' || haveCreatureOnBattlefield)
+      // Read the Scars only pays off if we've already landed combat damage
+      // this turn — so wait for main2 and require at least 1 such damage.
+      .filter(c => c.def.id !== 'read_the_scars' ||
+        (match.phase === 'main2' &&
+         match.opponentOf(me).combatDamageTakenThisTurn >= 1))
       .map(c => ({ kind: 'cast', card: c, cost: c.cost, mv: totalManaCost(c.cost) }));
 
     const activationOptions = [];
