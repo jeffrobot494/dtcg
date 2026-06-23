@@ -1,5 +1,15 @@
 import { defineEffect } from './registry.js';
 
+// Returns the effect's source card (typically from its own dies trigger, so
+// it's already in the graveyard via LKI) to its owner's hand. No target.
+defineEffect('return_self_to_hand', (match, ctx, _params) => {
+  const src = ctx.source;
+  if (!src?.zone) return;
+  src.zone.remove(src);
+  src.owner.hand.add(src);
+  match.notify(`${src.name} returns to ${src.owner.name}'s hand.`);
+});
+
 // Returns a card from a graveyard to its owner's hand.
 defineEffect('return_to_hand', (match, ctx, _params) => {
   const target = ctx.target;

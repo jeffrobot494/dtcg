@@ -14,7 +14,11 @@ export default {
       effects: [{ id: 'attach', target: { type: 'creature_you_control' } }],
     },
   ],
-  partial: true,
-  // TODO: "Whenever a creature is destroyed by Aunaratha, you gain 1 life."
-  // Needs damage-source attribution on the creature-dies event.
+  triggers: [
+    {
+      event: 'creature_dies',
+      condition: { type: 'killed_by_my_attached_creature' },
+      effects: [{ id: 'gain_life', amount: 1, who: 'controller' }],
+    },
+  ],
 };

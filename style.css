@@ -170,6 +170,12 @@ body {
   font-style: italic;
   margin-top: 2px;
 }
+.card-regen {
+  font-size: 0.7em;
+  color: #4fa;
+  font-style: italic;
+  margin-top: 2px;
+}
 
 .zone-counts {
   font-size: 0.75em;

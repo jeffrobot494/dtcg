@@ -52,6 +52,15 @@ export class BasicAI extends Agent {
     return this._pickBlockers(match, attackers);
   }
 
+  // Default to yes unless paying would kill us. Engine has already verified
+  // the cost is payable before asking.
+  async confirmTrigger(match, source, trigger) {
+    const me = this._meIn(match);
+    const lifeCost = trigger.cost?.life ?? 0;
+    if (lifeCost > 0 && me.life - lifeCost <= 0) return false;
+    return true;
+  }
+
   // ---------- decision policies ----------
 
   _meIn(match) {
@@ -67,12 +76,13 @@ export class BasicAI extends Agent {
 
     // 1.5. Activate any useful, affordable ability on our battlefield.
     for (const c of me.battlefield.cards) {
-      const abilities = c.def.abilities ?? [];
+      const abilities = c.abilities ?? [];
       for (let i = 0; i < abilities.length; i++) {
         const ab = abilities[i];
         if (ab.kind !== 'activated') continue;
         if (!match.canActivate(c, ab, me)) continue;
         if (!abilityHasUsefulTargets(match, ab, me, c)) continue;
+        if (!activationIsWorthwhile(c, ab)) continue;
         return { type: 'activate', card: c, abilityIndex: i };
       }
     }
@@ -83,16 +93,20 @@ export class BasicAI extends Agent {
     //    abilities (e.g., equip) even when the hand has nothing to cast.
     const potential = potentialPool(me);
 
+    const haveCreatureOnBattlefield = me.battlefield.cards.some(c => c.isCreature);
     const spellOptions = me.hand.cards
       .filter(c => !c.isLand)
       .filter(c => canPayCost(potential, c.cost))
       .filter(c => allTargetsAvailable(match, c, me))
       .filter(c => affordsMeaningfulX(c, potential))
+      // Don't cast equipment with no creature to wear it — its only value is
+      // the equip ability, and that needs a target.
+      .filter(c => c.def.subtype !== 'equipment' || haveCreatureOnBattlefield)
       .map(c => ({ kind: 'cast', card: c, cost: c.cost, mv: totalManaCost(c.cost) }));
 
     const activationOptions = [];
     for (const c of me.battlefield.cards) {
-      const abilities = c.def.abilities ?? [];
+      const abilities = c.abilities ?? [];
       for (let i = 0; i < abilities.length; i++) {
         const ab = abilities[i];
         if (ab.kind !== 'activated') continue;
@@ -106,6 +120,7 @@ export class BasicAI extends Agent {
           if (match.phase !== 'main1' && match.phase !== 'main2') continue;
         }
         if (!abilityHasUsefulTargets(match, ab, me, c)) continue;
+        if (!activationIsWorthwhile(c, ab)) continue;
         activationOptions.push({
           kind: 'activate', card: c, abilityIndex: i,
           cost: ab.cost.mana, mv: totalManaCost(ab.cost.mana),
@@ -282,33 +297,26 @@ export class BasicAI extends Agent {
   _pickAttackers(match) {
     const me = this._meIn(match);
     const opp = match.opponentOf(me);
-    const eligible = me.battlefield.cards.filter(c =>
-      c.isCreature && !c.tapped && !c.summoningSick
-    );
+    const eligible = me.battlefield.cards
+      .filter(c => c.isCreature && !c.tapped && !c.summoningSick)
+      // Skip 0-power: no damage, and deathtouch needs nonzero damage to fire.
+      .filter(c => c.power > 0);
+
+    if (eligible.length === 0) return [];
+
     const oppBlockers = opp.battlefield.cards.filter(c =>
       c.isCreature && !c.tapped
     );
 
-    if (oppBlockers.length === 0) return eligible;  // free damage
+    if (oppBlockers.length === 0) return eligible;  // free chip damage
 
-    const biggest = oppBlockers.reduce((m, b) =>
-      valueOfCreature(b) > valueOfCreature(m) ? b : m
-    );
-
-    return eligible.filter(a => {
-      // Flying past no flying blockers = always attack.
-      if (a.hasKeyword('flying') && !oppBlockers.some(b => b.hasKeyword('flying'))) {
-        return true;
-      }
-      // Deathtouch always trades up.
-      if (a.hasKeyword('deathtouch')) return true;
-      // Would survive the biggest blocker's swing.
-      if ((a.toughness - a.damage) > biggest.power) return true;
-      // Would kill the biggest blocker.
-      if (a.power >= (biggest.toughness - biggest.damage)) return true;
-      // Pure suicide — skip.
-      return false;
-    });
+    // For up to SUBSET_THRESHOLD attackers, search every subset and pick the
+    // one with the best simulated net value. Above that, fall back to a
+    // greedy backwards-prune to stay fast.
+    if (eligible.length <= SUBSET_THRESHOLD) {
+      return pickAttackersExhaustive(eligible, oppBlockers, opp, me);
+    }
+    return pickAttackersGreedy(eligible, oppBlockers, opp, me);
   }
 
   _pickBlockers(match, attackers) {
@@ -424,6 +432,135 @@ function affordsMeaningfulX(card, potential) {
   return canPayCost(potential, withOneX);
 }
 
+// Up to this many eligible attackers, the AI tries every subset (2^N) and
+// picks the best by simulated net value. Beyond it, greedy backwards-prune.
+const SUBSET_THRESHOLD = 10;
+
+// Returns the subset of `eligible` that maximizes simulated combat value.
+function pickAttackersExhaustive(eligible, blockers, opp, me) {
+  let best = [];
+  let bestValue = 0;  // not attacking = baseline 0
+  for (let mask = 0; mask < (1 << eligible.length); mask++) {
+    const subset = [];
+    for (let i = 0; i < eligible.length; i++) {
+      if (mask & (1 << i)) subset.push(eligible[i]);
+    }
+    const value = simulateCombat(subset, blockers, opp, me);
+    if (value > bestValue) {
+      bestValue = value;
+      best = subset;
+    }
+  }
+  return best;
+}
+
+// Start with all eligible; remove the worst-contributing attacker one at a
+// time until no removal improves the score. Last resort for large boards.
+function pickAttackersGreedy(eligible, blockers, opp, me) {
+  let attackers = [...eligible];
+  let baseValue = simulateCombat(attackers, blockers, opp, me);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < attackers.length; i++) {
+      const without = attackers.filter((_, j) => j !== i);
+      const value = simulateCombat(without, blockers, opp, me);
+      if (value > baseValue) {
+        attackers = without;
+        baseValue = value;
+        changed = true;
+        break;
+      }
+    }
+  }
+  return baseValue > 0 ? attackers : [];
+}
+
+// Simulates a single combat: attackers vs blockers under the assumption that
+// the defender plays greedy-optimal (assigns cheapest killer to each attacker
+// in threat order, takes face damage when no killer exists unless lethal).
+// Returns net value to the AI: opp creature value lost + face damage - own
+// creature value lost. Lethal damage is weighted overwhelmingly.
+function simulateCombat(attackers, blockers, opp, me) {
+  // Defender prioritizes biggest threats first when assigning blocks.
+  const queue = [...attackers].sort((a, b) =>
+    valueOfCreature(b) - valueOfCreature(a)
+  );
+  const available = [...blockers];
+  const deadBlockers = new Set();
+
+  let aiLosses = 0;
+  let oppLosses = 0;
+  let damageToOpp = 0;
+
+  for (const a of queue) {
+    const legal = available.filter(b => simCanBlock(a, b));
+    if (legal.length === 0) {
+      damageToOpp += a.power;
+      continue;
+    }
+    const killers = legal.filter(b => simWouldKill(b, a));
+    if (killers.length > 0) {
+      const blocker = killers.reduce((m, b) =>
+        valueOfCreature(b) < valueOfCreature(m) ? b : m
+      );
+      aiLosses += valueOfCreature(a);
+      if (simWouldKill(a, blocker)) {
+        oppLosses += valueOfCreature(blocker);
+        deadBlockers.add(blocker);
+      }
+      available.splice(available.indexOf(blocker), 1);
+      continue;
+    }
+    // No killer — defender chumps only if next hit would be lethal.
+    const lifeIfTaken = opp.life - damageToOpp - a.power;
+    if (lifeIfTaken <= 0) {
+      const chump = legal.reduce((m, b) =>
+        valueOfCreature(b) < valueOfCreature(m) ? b : m
+      );
+      if (simWouldKill(a, chump)) {
+        oppLosses += valueOfCreature(chump);
+        deadBlockers.add(chump);
+      }
+      available.splice(available.indexOf(chump), 1);
+    } else {
+      damageToOpp += a.power;
+    }
+  }
+
+  // Lethal damage wins on the spot — opp doesn't get a counter-attack.
+  if (damageToOpp >= opp.life) return 1000;
+
+  // Counter-attack risk: if attacking taps our creatures and leaves us open
+  // to lethal damage on opponent's turn, refuse the attack entirely.
+  if (me) {
+    const attackerSet = new Set(attackers);
+    const oppCounterPower = opp.battlefield.cards
+      .filter(c => c.isCreature && !deadBlockers.has(c))
+      .reduce((s, c) => s + c.power, 0);
+    const aiBlockToughness = me.battlefield.cards
+      .filter(c => c.isCreature && !attackerSet.has(c))
+      .reduce((s, c) => s + c.toughness, 0);
+    const expectedDamage = Math.max(0, oppCounterPower - aiBlockToughness);
+    if (me.life - expectedDamage <= 0) return -1000;
+  }
+
+  // Face damage weighted 1.5× creature value: damage is the win condition,
+  // creatures are just a means. Nudges the AI toward aggression when an
+  // attack would otherwise tie 1:1 in pure value.
+  return oppLosses + damageToOpp * 1.5 - aiLosses;
+}
+
+function simCanBlock(attacker, blocker) {
+  if (attacker.hasKeyword('flying') && !blocker.hasKeyword('flying')) return false;
+  return true;
+}
+
+function simWouldKill(source, target) {
+  if (source.hasKeyword('deathtouch') && source.power > 0) return true;
+  return source.power >= (target.toughness - target.damage);
+}
+
 function valueOfCreature(card) {
   if (!card.isCreature) return 0;
   let v = card.power + card.toughness;
@@ -443,6 +580,17 @@ function allTargetsAvailable(match, card, controller) {
 }
 
 // Same idea as allTargetsAvailable but for activated-ability effects.
+// Per-ability sanity check (in addition to "has useful targets"). Currently
+// suppresses regen activation: the AI doesn't act on opponent's turn yet, and
+// shields expire at EOT, so pre-emptive shielding on its own turn wastes mana.
+// Revisit when the AI gets instant-speed responses.
+function activationIsWorthwhile(source, ability) {
+  for (const eff of ability.effects ?? []) {
+    if (eff.id === 'add_regen_shield') return false;
+  }
+  return true;
+}
+
 function abilityHasUsefulTargets(match, ability, controller, source) {
   for (const effect of ability.effects ?? []) {
     if (!effect.target) continue;

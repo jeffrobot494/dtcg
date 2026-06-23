@@ -32,6 +32,10 @@ import honorWithImmortality from './honor_with_immortality.js';
 import comeHome from './come_home.js';
 import immortality from './immortality.js';
 import smokeweaver from './smokeweaver.js';
+import grandfatherAbas from './grandfather_abas.js';
+import incinerate from './incinerate.js';
+import terror from './terror.js';
+import dishonoredGhoul from './dishonored_ghoul.js';
 
 const database = {
   mountain,
@@ -68,6 +72,10 @@ const database = {
   come_home: comeHome,
   immortality,
   smokeweaver,
+  grandfather_abas: grandfatherAbas,
+  incinerate,
+  terror,
+  dishonored_ghoul: dishonoredGhoul,
 };
 
 export function getCardDef(id) {

@@ -12,5 +12,7 @@ import './attach.js';
 import './exile.js';
 import './tokens.js';
 import './return.js';
+import './regenerate.js';
+import './incinerate.js';
 
 export { getEffect, defineEffect } from './registry.js';

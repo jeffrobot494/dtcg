@@ -29,6 +29,9 @@ export function describeCard(def) {
       line += ` and gains ${def.staticBuff.keywords.map(capitalize).join(', ')}`;
     }
     rules.push(line + '.');
+    for (const ab of def.staticBuff.grantedAbilities ?? []) {
+      rules.push(`Equipped creature gains "${describeAbility(ab)}".`);
+    }
   }
   if (def.keywords?.length) {
     rules.push(def.keywords.map(capitalize).join(', '));
@@ -61,6 +64,10 @@ function describeEffect(eff) {
     case 'grant_keywords': {
       const ks = (eff.keywords ?? []).map(capitalize).join(' and ');
       return `${capitalize(describeFilter(eff.target))} gains ${ks} until end of turn.`;
+    }
+    case 'grant_keywords_to_all': {
+      const ks = (eff.keywords ?? []).map(capitalize).join(' and ');
+      return `${capitalize(describeAoeFilter(eff.filter))} gain ${ks} until end of turn.`;
     }
     case 'modify_stats': {
       const p = eff.power ?? 0, t = eff.toughness ?? 0;
@@ -99,6 +106,12 @@ function describeEffect(eff) {
       const count = eff.target?.count === 'x' ? 'X ' : '';
       return `Return ${count}${describeFilter(eff.target)} to ${count ? 'your hand' : "its owner's hand"}.`;
     }
+    case 'return_self_to_hand':
+      return `Return this card to its owner's hand.`;
+    case 'add_regen_shield':
+      return `Regenerate this creature (next time it would die this turn, tap it and remove all damage instead).`;
+    case 'incinerate':
+      return `Deal ${describeAmount(eff.amount)} damage to ${describeFilter(eff.target)}. If a creature, it can't regenerate this turn. If a player, they can't gain life for the rest of the game.`;
     case 'return_to_battlefield': {
       let s = `Return ${describeFilter(eff.target)} to the battlefield`;
       if (eff.counter && eff.amount) {
@@ -113,7 +126,17 @@ function describeEffect(eff) {
 function describeTrigger(trig) {
   const prefix = describeTriggerPrefix(trig);
   const body = (trig.effects ?? []).map(describeEffect).join(' ');
+  if (trig.optional) {
+    const lifeCost = trig.cost?.life;
+    const costText = lifeCost ? ` pay ${lifeCost} life to` : '';
+    return `${prefix} you may${costText} ${decapitalize(body)}`;
+  }
   return `${prefix} ${body}`;
+}
+
+function decapitalize(s) {
+  if (!s) return s;
+  return s[0].toLowerCase() + s.slice(1);
 }
 
 function describeTriggerPrefix(trig) {
@@ -121,6 +144,8 @@ function describeTriggerPrefix(trig) {
   if (trig.event === 'creature_dies') {
     if (cond === 'self')        return 'When this creature dies,';
     if (cond === 'you_control') return 'Whenever a creature you control dies,';
+    if (cond === 'killed_by_my_attached_creature')
+      return 'Whenever a creature is destroyed by the equipped creature,';
     return 'Whenever a creature dies,';
   }
   if (trig.event === 'creature_attacks') {
@@ -166,6 +191,10 @@ function describeAbility(ab) {
     if (ab.effects?.length === 1 && ab.effects[0].id === 'attach') {
       return `Equip ${formatActivationCost(ab.cost)}`;
     }
+    // Special-case "Regenerate": a sole add_regen_shield effect.
+    if (ab.effects?.length === 1 && ab.effects[0].id === 'add_regen_shield') {
+      return `${formatActivationCost(ab.cost)}: Regenerate`;
+    }
     const costTxt = formatActivationCost(ab.cost);
     const effectsTxt = (ab.effects ?? []).map(describeEffect).join(' ');
     return `${costTxt}: ${effectsTxt}`;
@@ -202,6 +231,7 @@ function describeFilter(filter) {
 function describeAoeFilter(filter) {
   switch (filter?.type) {
     case 'creature':                return 'all creatures';
+    case 'creature_you_control':    return 'creatures you control';
     case 'creature_without_flying': return 'all creatures without Flying';
     case 'non_black_creature':      return 'all non-black creatures';
     case 'land':                    return 'all lands';

@@ -18,6 +18,14 @@ export class Card {
     this.grantedToughness = 0;
     // For equipment: which creature this is attached to (null if unattached).
     this.attachedTo = null;
+    // Regenerate shields (each consumed once to save the creature from dying).
+    this.regenerationShields = 0;
+    // Persistent modifier: when true, this creature can't consume a regen
+    // shield. Cleared at end of turn.
+    this.cantRegenThisTurn = false;
+    // Sources that have dealt damage to this creature during its current
+    // battlefield presence. Used by "killed by X" triggers (e.g., Aunaratha).
+    this.dealtDamageBy = new Set();
   }
 
   // Single API for keyword lookup. Checks the static card definition, any
@@ -37,6 +45,19 @@ export class Card {
     return this.controller.battlefield.cards.filter(c =>
       c.def.subtype === 'equipment' && c.attachedTo === this
     );
+  }
+
+  // All activated/mana abilities visible on this card: its own def abilities
+  // plus any granted by attached equipment (staticBuff.grantedAbilities).
+  // Iteration order matters because activations are indexed.
+  get abilities() {
+    const own = this.def.abilities ?? [];
+    const granted = [];
+    for (const eq of this._attachedEquipment) {
+      const list = eq.def.staticBuff?.grantedAbilities ?? [];
+      granted.push(...list);
+    }
+    return granted.length ? [...own, ...granted] : own;
   }
 
   get name() { return this.def.name; }

@@ -3,7 +3,7 @@ export default {
   name: 'Smokeweaver',
   type: 'creature',
   color: 'R',
-  cost: { generic: 3, R: 1 },
+  cost: { generic: 1, R: 2 },
   power: 0,
   toughness: 1,
   replacements: [

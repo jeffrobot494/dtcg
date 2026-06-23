@@ -1,0 +1,20 @@
+Name,Color,Mana value,Type,Effect,Stats
+Aunaratha,B,{1}{B},Artifact-Equipment,"Equipped creature gets +1/+1; Whenever a creature is destroyed by Aunaratha, you gain 1 life; Equip 2",
+Ancestral Armor,B,{1}{B},Artifact-Equipment,Equipped creature gets +0/+2; Equip 2,
+Simulacrum,B,{2}{B}{B},Creature,"As an additional cost to cast Simulacrum, pay X life. Simulacrum enters the battlefield with X +1/+0 counters.If X is 5 or more, Simulacrum also gains Flying.",1/1
+Giant Vampire Bat,B,{2}{B},Creature,"Flying; Whenever you attack, you may tap this creature to give target creature you control Flying until end of turn.",1/1
+Grandfather Abas,B,{1}{B}{B}{B},Creature,{B}: Regenerate,3/1
+Dishonored Ghoul,B,{B}{B},Creature,"When Dishonored Ghoul dies, you may pay 1 life to return it to your hand. ",1/1
+Mighty Serpent of the Vale,B,{3}{B}{B},Creature,"Deathtouch; When this creature dies, you lose four life.",2/4
+Grandmother Isa,B,{B}{B}{B},Creature,"As long as Grandmother Isa is in your graveyard, you may cast one creature spell from your graveyard on each of your turns. Pay 1 life in addition to their normal mana cost.",0/1
+Pox,B,{B}{B},Enchantment,"Lifelink; At the beginning of your end step, Pox deals 1 damage to target non-black creature.",
+Touch of Zot,B,{B},Instant,Target creature you control gains deathtouch and lifelink until end of turn. ,
+Share Blood,B,{1}{B},Sorcery,"As an additional cost to cast Share Blood, pay X life. Target creature heals 1/2 X life.",
+Choking Fume,B,{1}{B}{B},Sorcery,Lifelink; Choking Fume deals 1 damage to all non-black creatures.,
+Immortality,B,{2}{B}{B},Sorcery,Return target creature card from your graveyard to the battlefield. Put a -1/+1 counter on it.,
+Beseech the Shadows,B,{B}{B},Sorcery,You draw two cards and lose two life.,
+Come Home,B,{1}{B}{B},Sorcery,"As an additional cost to cast this spell, pay X life. Return X target creature cards from your graveyard to your hand. ",
+Press Into Service,B,{X}{B}{B},Sorcery,Exile X target creature cards from graveyards. Create X 2/1 ghoul creature golems.,
+Honor with Immortality,B,{B}{B},Sorcery,Exile target creature card from a graveyard. Create a golem of that card. (A golem is a copy of a card with the same power and toughness but no abilities).,
+Drain Life,B,{X}{B}{B},Sorcery,Drain Life deals X damage to target creature or player. You gain life equal to the amount of life lost.,
+Terror,B,{1}{B}{B},Sorcery,Creatures you control gain Fear until end of turn. (they can only be blocked by black creatures and golems).,

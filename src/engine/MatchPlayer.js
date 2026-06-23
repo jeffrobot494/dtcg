@@ -10,6 +10,9 @@ export class MatchPlayer {
     this.manaPool = emptyPool();
     this.landPlayedThisTurn = false;
     this.isPlayer = true;
+    // Persistent modifier: when true, this player can't gain life for the rest
+    // of the game. Never reset.
+    this.cantGainLifeForever = false;
 
     this.library = new Zone('library', this, { visibleTo: 'none', layout: 'stack' });
     this.hand = new Zone('hand', this, { visibleTo: 'owner', layout: 'row' });

@@ -3,8 +3,8 @@ export default {
   name: 'Immolation Deathshaman',
   type: 'creature',
   color: 'R',
-  manaValue: 2,
-  cost: { generic: 1, R: 1 },
+  manaValue: 3,
+  cost: { generic: 1, R: 2 },
   power: 0,
   toughness: 1,
   triggers: [

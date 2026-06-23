@@ -131,6 +131,9 @@ export class BattleView {
     if (card.attachedTo) {
       parts.push(`<div class="card-attached">→ ${this.escape(card.attachedTo.name)}</div>`);
     }
+    if (card.regenerationShields > 0) {
+      parts.push(`<div class="card-regen">regen ×${card.regenerationShields}</div>`);
+    }
     return `<div class="${classes.join(' ')}" data-iid="${card.iid}">${parts.join('')}</div>`;
   }
 
@@ -140,8 +143,11 @@ export class BattleView {
     const top = m.stack.items.length - 1;
     // Render top-of-stack first (it resolves first).
     const items = m.stack.items.map((item, i) => {
-      const targetsTxt = item.targets.filter(t => t != null)
-        .map(t => t.name).join(', ');
+      const targetsTxt = item.targets
+        .flat()
+        .filter(t => t != null)
+        .map(t => t.name)
+        .join(', ');
       const arrow = targetsTxt ? ` → ${this.escape(targetsTxt)}` : '';
       const isTop = i === top;
       const xLabel = item.x ? ` {X=${item.x}}` : '';
@@ -193,6 +199,12 @@ export class BattleView {
       }
       case 'attackers': return 'declare attackers';
       case 'blockers':  return 'declare blockers';
+      case 'confirm-trigger': {
+        const name = this.escape(req.source?.name ?? 'ability');
+        const lifeCost = req.trigger?.cost?.life;
+        const costText = lifeCost ? ` (pay ${lifeCost} life)` : '';
+        return `use ${name}'s ability${costText}?`;
+      }
     }
     return req.kind;
   }
@@ -234,6 +246,10 @@ export class BattleView {
         return `
           <button data-act="confirm-blockers">Confirm blocks (${this.blocks.length})</button>
           <small>Click your creature, then the attacker it blocks. Click an assigned blocker to remove.</small>`;
+      case 'confirm-trigger':
+        return `
+          <button data-act="confirm-trigger-yes">Yes</button>
+          <button data-act="confirm-trigger-no">No</button>`;
     }
     return '';
   }
@@ -375,7 +391,7 @@ export class BattleView {
         return;
       }
       // Activated abilities: activate the first one the player can afford.
-      const abilities = card.def.abilities ?? [];
+      const abilities = card.abilities ?? [];
       for (let i = 0; i < abilities.length; i++) {
         const ab = abilities[i];
         if (ab.kind !== 'activated') continue;
@@ -465,6 +481,14 @@ export class BattleView {
         this.blocks = [];
         this.selectedBlocker = null;
         p.agent.resolve(result);
+      }
+    } else if (act === 'confirm-trigger-yes' || act === 'confirm-trigger-no') {
+      const value = act === 'confirm-trigger-yes';
+      for (const p of m.players) {
+        if (p.agent.pending?.kind === 'confirm-trigger') {
+          p.agent.resolve(value);
+          return;
+        }
       }
     }
   }

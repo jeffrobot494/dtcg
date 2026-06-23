@@ -44,4 +44,8 @@ export class HumanAgent extends Agent {
   declareBlockers(match, attackers) {
     return this._request('blockers', { attackers });
   }
+
+  confirmTrigger(match, source, trigger) {
+    return this._request('confirm-trigger', { source, trigger });
+  }
 }

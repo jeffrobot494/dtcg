@@ -3,7 +3,7 @@ export default {
   name: 'Pox',
   type: 'enchantment',
   color: 'B',
-  cost: { generic: 1, B: 1 },
+  cost: { B: 2 },
   keywords: ['lifelink'],
   triggers: [
     {

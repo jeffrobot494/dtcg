@@ -22,6 +22,13 @@ export function matchesCondition(trigger, source, payload) {
     case 'your_phase':
       // Fires on the named phase, but only when it's this source's controller's turn.
       return payload?.player === source.controller && payload?.phase === cond.phase;
+    case 'killed_by_my_attached_creature': {
+      // For equipment: fires when a creature is destroyed and our wearer was
+      // among the sources that dealt damage to it.
+      const wearer = source.attachedTo;
+      if (!wearer) return false;
+      return payload?.killers?.has(wearer) ?? false;
+    }
     case 'any':
       return true;
   }

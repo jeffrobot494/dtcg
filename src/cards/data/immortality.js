@@ -3,7 +3,7 @@ export default {
   name: 'Immortality',
   type: 'sorcery',
   color: 'B',
-  cost: { generic: 3, B: 1 },
+  cost: { generic: 2, B: 2 },
   effects: [
     {
       id: 'return_to_battlefield',

@@ -12,6 +12,9 @@
 //   chooseXValue(match, card, max) -> integer in [0, max] | null (null = cancel cast)
 //   declareAttackers(match) -> Card[]
 //   declareBlockers(match, attackers) -> [{ attacker, blocker }]
+//   confirmTrigger(match, source, trigger) -> boolean
+//     For optional ("you may") triggers. Cost (if any) is paid by the engine
+//     only on a true return.
 //
 // Future additions: declareCost (additional life cost), chooseMode, mulligan.
 
@@ -21,4 +24,5 @@ export class Agent {
   async chooseXValue(match, card, max) { throw new Error('not implemented'); }
   async declareAttackers(match) { throw new Error('not implemented'); }
   async declareBlockers(match, attackers) { throw new Error('not implemented'); }
+  async confirmTrigger(match, source, trigger) { throw new Error('not implemented'); }
 }

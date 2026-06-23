@@ -4,7 +4,7 @@ export default {
   type: 'creature',
   color: 'R',
   manaValue: 3,
-  cost: { generic: 2, R: 1 },
+  cost: { generic: 1, R: 2 },
   power: 0,
   toughness: 2,
   abilities: [

@@ -4,7 +4,7 @@ export default {
   type: 'sorcery',
   color: 'B',
   manaValue: 2,
-  cost: { generic: 1, B: 1 },
+  cost: { B: 2 },
   effects: [
     { id: 'draw_cards', amount: 2 },
     { id: 'lose_life', amount: 2, who: 'controller' },

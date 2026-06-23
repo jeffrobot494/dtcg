@@ -3,7 +3,7 @@ export default {
   name: 'Come Home',
   type: 'sorcery',
   color: 'B',
-  cost: { generic: 2, B: 1, x: 'life' },
+  cost: { generic: 1, B: 2, x: 'life' },
   effects: [
     {
       id: 'return_to_hand',

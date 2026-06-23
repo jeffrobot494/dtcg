@@ -1,0 +1,20 @@
+Name,Color,Mana value,Type,Effect,Stats
+Staff of Pain,R,{1}{R{R},Artifact,"Equipped creature gets +1/+0 and gains, ""{T}: This creature deals 1 damage to any target""; Equip {1}",
+Fire Servant,R,{1}{R},Creature,"When Fire Servant dies, it deals 1 damage to any target.",0/1
+Fire Master,R,{1}{R}{R},Creature,Tap: Fire Master deals 1 damage to any target.,0/2
+Cavern Drake,R,{1}{R}{R},Creature,"Flying; When Cavern Drake attacks, target creature you control gains flying. ",1/1
+Mountain Warrior,R,{R}{R},Creature,-,2/1
+Fire Drake,R,{2}{R}{R},Creature,"Flying; When Fire Drake attacks it deals 1 damage to any target, then target creature you control gains Flying.",1/2
+Smokeweaver,R,{1}{R}{R},Creature,"Whenever a source would deal damage to a creature you control, prevent one of that damage.",0/1
+Rockeater,R,{3}{R}{R},Creature,Trample,3/2
+Immolation Deathshaman,R,{1}{R}{R},Creature,"Whenever a creature you control dies, this creature deals 1 damage to any target.",0/1
+Walk on Coals,R,{1}{R},Enchantment,"At the beginning of your first main phase, add {R} and lose 1 life.",
+Destroy Artifact,R,{1}{R},Instant,Destroy target artifact,
+Boil,R,{R},Instant,Boil deals 1 damage to any target,
+Immolate,R,{R},Instant,Target creature gets +1/-1 until end of turn.,
+Rockslide,R,{1}{R},Instant,Rockslide deals two damage to target creature without Flying,
+Blaze,R,{X}{R},Sorcery,Blaze deals X damage to any target.,
+Erupt,R,{2}{R}{R},Sorcery,Erupt deals two damage to all creatures without flying,
+Read the Scars,R,{1}{R},Sorcery,"At the beginning of your next upkeep, draw cards equal to the number of creatures that died since you cast this spell.",
+Conflagration,R,{1}{R}{R},Sorcery,Destroy target land,
+Incinerate,R,{1}{R}{R},Sorcery,"Incinerate deals two damage to any target. If Incinerate targets a creature, that creature cannot regenerate this turn. If Incinerate targets a player, that player cannot gain life for the rest of the game.",

@@ -4,8 +4,18 @@ export default {
   type: 'artifact',
   subtype: 'equipment',
   color: 'R',
-  cost: { generic: 2, R: 1 },
-  staticBuff: { power: 1, toughness: 0 },
+  cost: { generic: 1, R: 2 },
+  staticBuff: {
+    power: 1,
+    toughness: 0,
+    grantedAbilities: [
+      {
+        kind: 'activated',
+        cost: { tap: true },
+        effects: [{ id: 'deal_damage', amount: 1, target: { type: 'any' } }],
+      },
+    ],
+  },
   abilities: [
     {
       kind: 'activated',
@@ -14,7 +24,4 @@ export default {
       effects: [{ id: 'attach', target: { type: 'creature_you_control' } }],
     },
   ],
-  partial: true,
-  // TODO: Equipped creature gains "{T}: deal 1 damage to any target."
-  // Needs a "granted activated abilities" system (analogous to granted keywords).
 };

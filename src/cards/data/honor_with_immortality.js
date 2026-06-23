@@ -3,7 +3,7 @@ export default {
   name: 'Honor with Immortality',
   type: 'sorcery',
   color: 'B',
-  cost: { generic: 1, B: 1 },
+  cost: { B: 2 },
   effects: [
     {
       id: 'exile_and_golem',

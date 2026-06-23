@@ -23,6 +23,10 @@ defineEffect('gain_life', (match, ctx, params) => {
   ctx.match = match;
   const subject = resolveSubject(ctx, params.who);
   if (!subject?.isPlayer) return;
+  if (subject.cantGainLifeForever) {
+    match.notify(`${subject.name} can't gain life.`);
+    return;
+  }
   const amount = params.amount ?? 0;
   subject.life += amount;
   match.notify(`${subject.name} gains ${amount} life.`);

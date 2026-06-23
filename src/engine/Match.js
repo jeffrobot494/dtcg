@@ -93,6 +93,8 @@ export class Match {
         c.grantedKeywords.clear();
         c.grantedPower = 0;
         c.grantedToughness = 0;
+        c.regenerationShields = 0;
+        c.cantRegenThisTurn = false;
       }
     }
 
@@ -284,7 +286,7 @@ export class Match {
   }
 
   async _actionActivate(player, card, abilityIndex) {
-    const ability = card.def.abilities?.[abilityIndex];
+    const ability = card.abilities?.[abilityIndex];
     if (!this.canActivate(card, ability, player)) return false;
 
     // Gather targets (cancellation here is free — no cost has been paid).
@@ -383,14 +385,18 @@ export class Match {
       target.life -= amount;
     } else {
       target.damage += amount;
+      // Track the source for "killed by X" triggers (Aunaratha etc.).
+      target.dealtDamageBy.add(source);
       if (source.hasKeyword?.('deathtouch')) {
         target.markedForDeath = true;
         tags.push('deathtouch');
       }
     }
     if (source.hasKeyword?.('lifelink')) {
-      source.controller.life += amount;
-      tags.push('lifelink');
+      if (!source.controller.cantGainLifeForever) {
+        source.controller.life += amount;
+        tags.push('lifelink');
+      }
     }
     const tagText = tags.length ? ` (${tags.join(', ')})` : '';
     this.notify(`${source.name} deals ${amount} to ${target.name}${tagText}.`);
@@ -418,12 +424,21 @@ export class Match {
   async checkStateBasedActions() {
     while (true) {
       // Identify everything dying in this wave, BEFORE moving anything.
+      // Creatures with regeneration shields consume one shield to be saved
+      // instead of dying (damage cleared, tapped, stays on battlefield).
       const allDying = [];
       for (const p of this.players) {
         for (const c of p.battlefield.cards) {
-          // A creature dies if damage >= toughness (covers 0/0 too) or
-          // it's marked for death by deathtouch.
-          if (c.isCreature && (c.damage >= c.toughness || c.markedForDeath)) {
+          if (!c.isCreature) continue;
+          const wouldDie = (c.damage >= c.toughness) || c.markedForDeath;
+          if (!wouldDie) continue;
+          if ((c.regenerationShields ?? 0) > 0 && !c.cantRegenThisTurn) {
+            c.regenerationShields -= 1;
+            c.damage = 0;
+            c.markedForDeath = false;
+            c.tapped = true;
+            this.notify(`${c.name} regenerates.`);
+          } else {
             allDying.push(c);
           }
         }
@@ -436,6 +451,14 @@ export class Match {
       const scope = [];
       for (const p of this.players) scope.push(...p.battlefield.cards);
 
+      // Snapshot each dying creature's killers (sources that damaged it)
+      // before movePermanentToGraveyard wipes the state. Used by triggers
+      // like Aunaratha's "destroyed by attached creature".
+      const killersById = new Map();
+      for (const c of allDying) {
+        killersById.set(c, new Set(c.dealtDamageBy ?? []));
+      }
+
       // Move all dying creatures to graveyards simultaneously.
       for (const c of allDying) {
         this.movePermanentToGraveyard(c);
@@ -444,7 +467,9 @@ export class Match {
 
       // Queue triggers for each death event using the shared pre-event scope.
       for (const c of allDying) {
-        this._queueTriggersForEvent('creature_dies', { card: c, scope });
+        this._queueTriggersForEvent('creature_dies', {
+          card: c, scope, killers: killersById.get(c),
+        });
       }
 
       await this._processPendingTriggers();
@@ -483,6 +508,18 @@ export class Match {
     while (this._pendingTriggers.length > 0) {
       const { source, trigger } = this._pendingTriggers.shift();
       const controller = source.controller;
+      // Optional triggers ("you may ..."): skip silently if the cost isn't
+      // payable, otherwise ask the controller. On yes, pay the cost up front.
+      if (trigger.optional) {
+        const lifeCost = trigger.cost?.life ?? 0;
+        if (lifeCost > 0 && controller.life < lifeCost) continue;
+        const ok = await controller.agent.confirmTrigger(this, source, trigger);
+        if (!ok) continue;
+        if (lifeCost > 0) {
+          controller.life -= lifeCost;
+          this.notify(`${controller.name} pays ${lifeCost} life for ${source.name}.`);
+        }
+      }
       const effects = trigger.effects ?? [];
       const targets = [];
       let aborted = false;
@@ -523,6 +560,9 @@ export class Match {
     card.grantedPower = 0;
     card.grantedToughness = 0;
     card.counters = {};  // counters reset when leaving the battlefield (MtG rule)
+    card.regenerationShields = 0;
+    card.cantRegenThisTurn = false;
+    card.dealtDamageBy = new Set();
     // Equipment cleanup: clear our own attachment, and detach any equipment
     // that was attached to us.
     card.attachedTo = null;

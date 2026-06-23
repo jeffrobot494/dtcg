@@ -3,7 +3,7 @@ export default {
   name: 'Press Into Service',
   type: 'sorcery',
   color: 'B',
-  cost: { generic: 2, x: 'mana' },
+  cost: { B: 2, x: 'mana' },
   effects: [
     {
       id: 'exile_target',

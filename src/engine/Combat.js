@@ -104,16 +104,25 @@ export async function runCombatPhase(match) {
         match.notify(`${attacker.name} was blocked; all blockers gone — no damage.`);
       }
     } else {
+      // Assign damage to blockers in declared order. Each non-last blocker
+      // gets exactly lethal (1 with deathtouch, else remaining toughness).
+      // The LAST blocker absorbs all remaining damage (without trample) or
+      // exactly its lethal (with trample, so excess goes to the defender).
+      // Assigning the full damage matters when a replacement effect like
+      // Smokeweaver later reduces the amount — a 3-power attacker still
+      // kills a 1-toughness blocker even when 1 damage is prevented.
+      const trample = attacker.hasKeyword('trample');
+      const deathtouch = attacker.hasKeyword('deathtouch');
       let remaining = attacker.power;
-      for (const b of livingBlockers) {
-        const lethal = attacker.hasKeyword('deathtouch')
-          ? 1
-          : Math.max(1, b.toughness - b.damage);
-        const dmg = Math.min(remaining, lethal);
+      for (let i = 0; i < livingBlockers.length; i++) {
+        const b = livingBlockers[i];
+        const isLast = i === livingBlockers.length - 1;
+        const lethal = deathtouch ? 1 : Math.max(1, b.toughness - b.damage);
+        const dmg = (isLast && !trample) ? remaining : Math.min(remaining, lethal);
         match.dealDamage(attacker, b, dmg);
         remaining -= dmg;
       }
-      if (attacker.hasKeyword('trample') && remaining > 0) {
+      if (trample && remaining > 0) {
         match.dealDamage(attacker, match.nonActivePlayer, remaining);
       }
       for (const b of livingBlockers) {
@@ -129,5 +138,10 @@ export async function runCombatPhase(match) {
 // Returns true if `blocker` is legally able to block `attacker`.
 export function canBlock(blocker, attacker) {
   if (attacker.hasKeyword('flying') && !blocker.hasKeyword('flying')) return false;
+  if (attacker.hasKeyword('fear')) {
+    const isBlack = blocker.def.color === 'B';
+    const isToken = !!blocker.def.isToken;
+    if (!isBlack && !isToken) return false;
+  }
   return true;
 }
