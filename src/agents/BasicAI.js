@@ -21,12 +21,40 @@ export class BasicAI extends Agent {
 
   async choosePriorityAction(match) {
     const me = this._meIn(match);
-    if (me !== match.activePlayer || !match.stack.isEmpty) {
-      return { type: 'pass' };
+    const inMainPhase = match.phase === 'main1' || match.phase === 'main2';
+    // _mainPhaseAction plays lands and casts sorcery-speed spells; calling it
+    // outside main1/main2 leads to actions the engine rejects (infinite loop
+    // since priority stays with the actor on failed actions). In other windows
+    // — upkeep/draw/end/combat substeps, opponent's turn, mid-stack — only
+    // reactive plays are appropriate.
+    if (me !== match.activePlayer || !match.stack.isEmpty || !inMainPhase) {
+      const reactive = this._reactiveAction(match, me);
+      if (reactive) await delay(DELAY_MS);
+      return reactive ?? { type: 'pass' };
     }
     const action = this._mainPhaseAction(match, me);
     if (action.type !== 'pass') await delay(DELAY_MS);
     return action;
+  }
+
+  // Narrow reactive scope: activate a regenerate ability when one of our
+  // creatures is about to die in combat. Reuses the same gates as the
+  // active-turn path (canActivate / safe life / activationIsWorthwhile, which
+  // already checks wouldDieInCombat for add_regen_shield).
+  _reactiveAction(match, me) {
+    for (const c of me.battlefield.cards) {
+      const abilities = c.abilities ?? [];
+      for (let i = 0; i < abilities.length; i++) {
+        const ab = abilities[i];
+        if (ab.kind !== 'activated') continue;
+        if (!ab.effects?.some(e => e.id === 'add_regen_shield')) continue;
+        if (!match.canActivate(c, ab, me)) continue;
+        if (!canSafelyPayLifeCost(me, ab)) continue;
+        if (!activationIsWorthwhile(c, ab, match)) continue;
+        return { type: 'activate', card: c, abilityIndex: i };
+      }
+    }
+    return null;
   }
 
   async chooseTarget(match, filter, source, effect, picks) {
