@@ -35,8 +35,14 @@ export class BasicAI extends Agent {
   }
 
   async chooseXValue(match, card, max) {
-    // Mana X: dump everything (more damage / effect = better).
-    if (card.cost?.x === 'mana') return max;
+    // Mana X: when X is a target count (count: 'x'), don't pay for more X
+    // than there are valid targets — extra mana would create nothing. For
+    // amount-style X (damage etc.), dumping everything is correct.
+    if (card.cost?.x === 'mana') {
+      const me = this._meIn(match);
+      const cap = xTargetCountCap(card, match, me);
+      return cap === null ? max : Math.min(max, cap);
+    }
     // Life X: target 5 (Simulacrum's Flying threshold) but always leave a
     // 2-life buffer so we don't suicide on the cost.
     if (card.cost?.x === 'life') {
@@ -111,8 +117,6 @@ export class BasicAI extends Agent {
       // Don't cast equipment with no creature to wear it — its only value is
       // the equip ability, and that needs a target.
       .filter(c => c.def.subtype !== 'equipment' || haveCreatureOnBattlefield)
-      // Terror grants Fear to your creatures — useless with none on board.
-      .filter(c => c.def.id !== 'terror' || haveCreatureOnBattlefield)
       // Read the Scars only pays off if we've already landed combat damage
       // this turn — so wait for main2 and require at least 1 such damage.
       .filter(c => c.def.id !== 'read_the_scars' ||
@@ -269,12 +273,12 @@ export class BasicAI extends Agent {
       return friendly[0];
     }
     // For grant_keywords: prefer friendly creatures that don't already have all
-    // the granted keywords. Among those, prefer current attackers (tapped,
-    // non-sick) since the grant lasts only until end of turn.
+    // the granted keywords. Exclude summoning-sick (can't attack this turn so
+    // EOT grants are wasted). Among those, prefer current attackers.
     if (effect?.id === 'grant_keywords') {
       const keywords = effect.keywords ?? [];
       const friendly = candidates.filter(t =>
-        !t.isPlayer && t.isCreature && t.controller === me
+        !t.isPlayer && t.isCreature && t.controller === me && !t.summoningSick
       );
       const needsIt = friendly.filter(t => keywords.some(k => !t.hasKeyword(k)));
       if (needsIt.length > 0) {
@@ -461,6 +465,32 @@ function totalManaCost(cost) {
 function canSafelyPayLifeCost(player, ability) {
   const cost = ability.cost?.life ?? 0;
   return cost === 0 || player.life - cost > 2;
+}
+
+// Returns the smallest useful X across any effect that uses X as a target
+// count, or null if no effect does (in which case X is uncapped).
+function xTargetCountCap(card, match, controller) {
+  let cap = null;
+  for (const effect of card.def.effects ?? []) {
+    if (effect.target?.count !== 'x') continue;
+    const n = countValidTargets(match, effect.target, controller);
+    cap = cap === null ? n : Math.min(cap, n);
+  }
+  return cap;
+}
+
+function countValidTargets(match, filter, controller) {
+  let n = 0;
+  for (const p of match.players) {
+    if (isValidTarget(p, filter, match, controller)) n++;
+    for (const c of p.battlefield.cards) {
+      if (isValidTarget(c, filter, match, controller)) n++;
+    }
+    for (const c of p.graveyard.cards) {
+      if (isValidTarget(c, filter, match, controller)) n++;
+    }
+  }
+  return n;
 }
 
 function affordsMeaningfulX(card, potential) {
@@ -657,10 +687,23 @@ function valueOfCreature(card) {
 
 function allTargetsAvailable(match, card, controller) {
   for (const effect of card.def.effects ?? []) {
-    if (!effect.target) continue;
-    if (!hasUsefulTarget(match, effect, controller, card)) return false;
+    if (effect.target) {
+      if (!hasUsefulTarget(match, effect, controller, card)) return false;
+    } else if (effect.filter) {
+      // Filter-based AOE / mass effect: at least one battlefield card must match.
+      if (!hasAnyMatchingFilter(match, effect.filter, controller)) return false;
+    }
   }
   return true;
+}
+
+function hasAnyMatchingFilter(match, filter, controller) {
+  for (const p of match.players) {
+    for (const c of p.battlefield.cards) {
+      if (isValidTarget(c, filter, match, controller)) return true;
+    }
+  }
+  return false;
 }
 
 // Same idea as allTargetsAvailable but for activated-ability effects.

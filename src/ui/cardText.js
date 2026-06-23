@@ -92,10 +92,14 @@ function describeEffect(eff) {
       return `Destroy ${describeFilter(eff.target)}.`;
     case 'draw_cards':
       return `Draw ${eff.amount} ${eff.amount === 1 ? 'card' : 'cards'}.`;
-    case 'lose_life':
-      return `${describeWho(eff.who)} loses ${eff.amount} life.`;
-    case 'gain_life':
-      return `${describeWho(eff.who)} gains ${eff.amount} life.`;
+    case 'lose_life': {
+      const verb = eff.who === 'controller' ? 'lose' : 'loses';
+      return `${describeWho(eff.who)} ${verb} ${eff.amount} life.`;
+    }
+    case 'gain_life': {
+      const verb = eff.who === 'controller' ? 'gain' : 'gains';
+      return `${describeWho(eff.who)} ${verb} ${eff.amount} life.`;
+    }
     case 'add_mana': {
       const parts = Object.entries(eff.mana ?? {})
         .map(([c, n]) => `{${c}}`.repeat(n))
