@@ -48,10 +48,55 @@ export class BasicAI extends Agent {
         const ab = abilities[i];
         if (ab.kind !== 'activated') continue;
         if (!ab.effects?.some(e => e.id === 'add_regen_shield')) continue;
-        if (!match.canActivate(c, ab, me)) continue;
         if (!canSafelyPayLifeCost(me, ab)) continue;
         if (!activationIsWorthwhile(c, ab, match)) continue;
-        return { type: 'activate', card: c, abilityIndex: i };
+        if (match.canActivate(c, ab, me)) {
+          return { type: 'activate', card: c, abilityIndex: i };
+        }
+        // canActivate failed — could it succeed if we first tapped a land
+        // for mana? Check by temporarily swapping in the potential pool.
+        if (!ab.cost?.mana) continue;
+        const realPool = me.manaPool;
+        me.manaPool = potentialPool(me);
+        const okAfterTap = match.canActivate(c, ab, me);
+        me.manaPool = realPool;
+        if (!okAfterTap) continue;
+        const land = pickLandToTap(me, { cost: ab.cost.mana });
+        if (land) return { type: 'tap_for_mana', card: land };
+      }
+    }
+    const burn = this._reactiveBurn(match, me);
+    if (burn) return burn;
+    return null;
+  }
+
+  // Cast an instant damage spell at an attacker during opponent's
+  // after_attackers window if we can kill it. Requires the attacker's power
+  // to be ≥ 2 — burning a 1/1 typically costs more than it saves. Returns
+  // tap_for_mana intermediate steps if the pool isn't full yet.
+  _reactiveBurn(match, me) {
+    if (match.combatStep !== 'after_attackers') return null;
+    if (me === match.activePlayer) return null;
+    const attackers = (match.currentAttackers ?? []).filter(a => a.power >= 2);
+    if (attackers.length === 0) return null;
+
+    const potential = potentialPool(me);
+    for (const card of me.hand.cards) {
+      if (card.def.type !== 'instant') continue;
+      if (!canPayCost(potential, card.cost)) continue;
+      for (const eff of card.def.effects ?? []) {
+        if (eff.id !== 'deal_damage') continue;
+        const amount = typeof eff.amount === 'number' ? eff.amount : 0;
+        if (amount === 0) continue;
+        for (const att of attackers) {
+          if (!isValidTarget(att, eff.target, match, me)) continue;
+          if (amount < (att.toughness - att.damage)) continue;
+          if (canPayCost(me.manaPool, card.cost)) {
+            return { type: 'cast', card };
+          }
+          const land = pickLandToTap(me, card);
+          if (land) return { type: 'tap_for_mana', card: land };
+        }
       }
     }
     return null;
@@ -187,12 +232,22 @@ export class BasicAI extends Agent {
     const target = playable[0];
 
     // 3. If we have enough mana RIGHT NOW, do it — but for X-mana spells, tap
-    //    any remaining lands first so X is as large as possible.
+    //    any remaining lands first so X is as large as useful. If X is target-
+    //    count-capped, stop tapping once we have enough for that cap.
     if (canPayCost(me.manaPool, target.cost)) {
       if (target.kind === 'cast') {
         const isXMana = target.cost?.x === 'mana';
         const hasUntapped = me.battlefield.cards.some(c => c.isLand && !c.tapped);
-        if (!(isXMana && hasUntapped)) {
+        let shouldKeepTapping = isXMana && hasUntapped;
+        if (shouldKeepTapping) {
+          const cap = xTargetCountCap(target.card, match, me);
+          if (cap !== null) {
+            const needed = totalManaCost(target.cost) + cap;
+            const inPool = totalManaCost(me.manaPool);
+            if (inPool >= needed) shouldKeepTapping = false;
+          }
+        }
+        if (!shouldKeepTapping) {
           return { type: 'cast', card: target.card };
         }
       } else if (target.kind === 'cast_from_graveyard') {
@@ -330,6 +385,20 @@ export class BasicAI extends Agent {
       if (opp.life <= 5 && enemies.includes(opp)) return opp;
       const enemyCreatures = enemies.filter(t => t.isCreature);
       if (enemyCreatures.length > 0) {
+        // For damage spells, prefer creatures the spell would actually kill —
+        // killing > wounding. Pick highest-value killable; else fall back to
+        // biggest threat.
+        if (effect?.id === 'deal_damage') {
+          const dmg = effect.amount === 'x'      ? (source?.xValue ?? 0)
+                    : effect.amount === 'half_x' ? Math.ceil((source?.xValue ?? 0) / 2)
+                    : (effect.amount ?? 0);
+          const killable = enemyCreatures.filter(c => dmg >= (c.toughness - c.damage));
+          if (killable.length > 0) {
+            return killable.reduce((best, c) =>
+              valueOfCreature(c) > valueOfCreature(best) ? c : best
+            );
+          }
+        }
         return enemyCreatures.reduce((best, c) =>
           valueOfCreature(c) > valueOfCreature(best) ? c : best
         );
