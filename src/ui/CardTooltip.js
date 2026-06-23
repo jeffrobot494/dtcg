@@ -13,10 +13,10 @@ export class CardTooltip {
     this.timer = null;
   }
 
-  scheduleShow(anchorEl, def) {
+  scheduleShow(anchorEl, cardOrDef) {
     this.hide();
     this.timer = setTimeout(() => {
-      this.el.innerHTML = describeCard(def);
+      this.el.innerHTML = describeCard(cardOrDef);
       this.el.classList.remove('hidden');
       this._positionNear(anchorEl);
     }, DELAY_MS);

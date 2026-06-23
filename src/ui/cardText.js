@@ -2,7 +2,12 @@
 // Used by the tooltip; a single source of truth that stays in sync with behavior.
 import { formatCost } from '../engine/Cost.js';
 
-export function describeCard(def) {
+export function describeCard(input) {
+  // Accept either a Card instance (has .def) or a bare def. When given a
+  // Card instance, the keyword line reflects live state (granted/equipment/
+  // conditional); otherwise it's the printed static keywords.
+  const card = input?.def ? input : null;
+  const def = input?.def ?? input;
   const out = [];
   out.push(`<div class="tt-name">${escape(def.name)}</div>`);
 
@@ -33,8 +38,14 @@ export function describeCard(def) {
       rules.push(`Equipped creature gains "${describeAbility(ab)}".`);
     }
   }
-  if (def.keywords?.length) {
-    rules.push(def.keywords.map(capitalize).join(', '));
+  const keywordsToShow = card ? card.activeKeywords : (def.keywords ?? []);
+  if (keywordsToShow.length) {
+    rules.push(keywordsToShow.map(capitalize).join(', '));
+  }
+  for (const ck of def.conditionalKeywords ?? []) {
+    if (ck.when?.x?.gte != null) {
+      rules.push(`If X is ${ck.when.x.gte} or more, this creature also has ${capitalize(ck.keyword)}.`);
+    }
   }
   for (const eff of def.effects ?? [])    rules.push(describeEffect(eff));
   for (const trig of def.triggers ?? [])  rules.push(describeTrigger(trig));
@@ -96,6 +107,14 @@ function describeEffect(eff) {
     }
     case 'exile_and_golem':
       return `Exile ${describeFilter(eff.target)} and create a golem (a copy with the same power and toughness but no abilities).`;
+    case 'exile_and_create_token': {
+      const t = eff.template ?? {};
+      const stats = t.power != null ? ` ${t.power}/${t.toughness}` : '';
+      const what = eff.target?.count === 'x'
+        ? 'up to X target creature cards from graveyards'
+        : describeFilter(eff.target);
+      return `Exile ${what}. For each card exiled this way, create a${stats} ${t.name}.`;
+    }
     case 'create_tokens': {
       const n = describeAmount(eff.count);
       const t = eff.template ?? {};
@@ -110,6 +129,11 @@ function describeEffect(eff) {
       return `Return this card to its owner's hand.`;
     case 'register_scars_trigger':
       return `At the beginning of your end step, draw cards equal to the amount of combat damage dealt to your opponent this turn.`;
+    case 'put_counter_on_self': {
+      const n = describeAmount(eff.amount);
+      const c = eff.counter ?? '+1/+1';
+      return `Put ${n} ${c} counter${n === 1 ? '' : 's'} on it.`;
+    }
     case 'add_regen_shield':
       return `Regenerate this creature (next time it would die this turn, tap it and remove all damage instead).`;
     case 'incinerate':
@@ -154,6 +178,11 @@ function describeTriggerPrefix(trig) {
     if (cond === 'self')        return 'When this creature attacks,';
     if (cond === 'you_control') return 'Whenever a creature you control attacks,';
     return 'Whenever a creature attacks,';
+  }
+  if (trig.event === 'creature_etb') {
+    if (cond === 'self')        return 'When this creature enters the battlefield,';
+    if (cond === 'you_control') return 'Whenever a creature you control enters the battlefield,';
+    return 'Whenever a creature enters the battlefield,';
   }
   if (trig.event === 'phase_begins') {
     const labels = {
@@ -226,6 +255,8 @@ function describeFilter(filter) {
     case 'non_black_creature':      return 'target non-black creature';
     case 'land':                    return 'target land';
     case 'artifact':                return 'target artifact';
+    case 'creature_in_graveyard':       return 'target creature card from a graveyard';
+    case 'creature_in_your_graveyard':  return 'target creature card from your graveyard';
   }
   return 'target';
 }

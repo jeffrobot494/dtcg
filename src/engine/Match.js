@@ -209,6 +209,9 @@ export class Match {
       }
     }
 
+    // Expose chosen X to target-collection callers (e.g., AI lethal checks).
+    if (card.cost?.x) card.xValue = xValue;
+
     // Gather targets. Each effect's target slot is an array of picks
     // (length 1 for normal, length N for X-target effects).
     const effects = card.def.effects ?? [];
@@ -255,6 +258,8 @@ export class Match {
       player.battlefield.add(card);
       card.summoningSick = true;
       this.notify(`${player.name} casts ${card.name} (paid ${formatCost(effectiveCost)}).`);
+      this._queueTriggersForEvent('creature_etb', { card });
+      await this._processPendingTriggers();
     } else {
       this.stackZone.add(card);
       this.stack.push({
@@ -565,6 +570,7 @@ export class Match {
         controller,
         targets,
         effects,
+        x: source.xValue ?? 0,
       });
       this.notify(`${source.name}'s ability triggers.`);
     }
@@ -583,6 +589,7 @@ export class Match {
     card.regenerationShields = 0;
     card.cantRegenThisTurn = false;
     card.dealtDamageBy = new Set();
+    card.xValue = 0;
     // Equipment cleanup: clear our own attachment, and detach any equipment
     // that was attached to us.
     card.attachedTo = null;

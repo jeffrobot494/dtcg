@@ -37,8 +37,12 @@ export class BasicAI extends Agent {
   async chooseXValue(match, card, max) {
     // Mana X: dump everything (more damage / effect = better).
     if (card.cost?.x === 'mana') return max;
-    // Life X: spend conservatively so we don't suicide-heal.
-    if (card.cost?.x === 'life') return Math.min(max, 4);
+    // Life X: target 5 (Simulacrum's Flying threshold) but always leave a
+    // 2-life buffer so we don't suicide on the cost.
+    if (card.cost?.x === 'life') {
+      const me = this._meIn(match);
+      return Math.max(0, Math.min(max, 5, me.life - 2));
+    }
     return max;
   }
 
@@ -102,6 +106,8 @@ export class BasicAI extends Agent {
       // Don't cast equipment with no creature to wear it — its only value is
       // the equip ability, and that needs a target.
       .filter(c => c.def.subtype !== 'equipment' || haveCreatureOnBattlefield)
+      // Terror grants Fear to your creatures — useless with none on board.
+      .filter(c => c.def.id !== 'terror' || haveCreatureOnBattlefield)
       // Read the Scars only pays off if we've already landed combat damage
       // this turn — so wait for main2 and require at least 1 such damage.
       .filter(c => c.def.id !== 'read_the_scars' ||
@@ -270,7 +276,14 @@ export class BasicAI extends Agent {
 
     const enemies = candidates.filter(t => t === opp || t.controller === opp);
     if (enemies.length > 0) {
-      // Lethal-eyeing finisher: dump damage on opponent if they're nearly dead.
+      // Lethal check: if this damage spell would kill opponent, take the win.
+      if (effect?.id === 'deal_damage' && enemies.includes(opp)) {
+        const dmg = effect.amount === 'x'      ? (source?.xValue ?? 0)
+                  : effect.amount === 'half_x' ? Math.ceil((source?.xValue ?? 0) / 2)
+                  : (effect.amount ?? 0);
+        if (dmg >= opp.life) return opp;
+      }
+      // Finisher: dump damage on opponent if they're nearly dead anyway.
       if (opp.life <= 5 && enemies.includes(opp)) return opp;
       const enemyCreatures = enemies.filter(t => t.isCreature);
       if (enemyCreatures.length > 0) {

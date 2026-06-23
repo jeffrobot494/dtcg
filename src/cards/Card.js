@@ -26,6 +26,9 @@ export class Card {
     // Sources that have dealt damage to this creature during its current
     // battlefield presence. Used by "killed by X" triggers (e.g., Aunaratha).
     this.dealtDamageBy = new Set();
+    // X paid at cast time. Persists while on battlefield, drives ETB counters
+    // and conditionalKeywords (e.g., Simulacrum). Reset when leaving play.
+    this.xValue = 0;
   }
 
   // Single API for keyword lookup. Checks the static card definition, any
@@ -36,7 +39,30 @@ export class Card {
     for (const eq of this._attachedEquipment) {
       if (eq.def.staticBuff?.keywords?.includes(name)) return true;
     }
+    for (const ck of this.def.conditionalKeywords ?? []) {
+      if (ck.keyword === name && this._conditionalKeywordMet(ck.when)) return true;
+    }
     return false;
+  }
+
+  _conditionalKeywordMet(when) {
+    if (when?.x?.gte != null) return this.xValue >= when.x.gte;
+    return false;
+  }
+
+  // Every keyword currently active on this card: def, granted, equipment,
+  // and any conditionalKeywords whose predicate is met. Used by the tooltip
+  // to reflect live state.
+  get activeKeywords() {
+    const out = new Set(this.def.keywords ?? []);
+    for (const k of this.grantedKeywords) out.add(k);
+    for (const eq of this._attachedEquipment) {
+      for (const k of (eq.def.staticBuff?.keywords ?? [])) out.add(k);
+    }
+    for (const ck of (this.def.conditionalKeywords ?? [])) {
+      if (this._conditionalKeywordMet(ck.when)) out.add(ck.keyword);
+    }
+    return [...out];
   }
 
   // Equipment currently attached to this card (live lookup over the battlefield).

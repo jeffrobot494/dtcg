@@ -292,7 +292,7 @@ export class BattleView {
       el.onclick = () => this.onCardClick(parseInt(el.dataset.iid, 10));
       el.onmouseenter = () => {
         const found = this.findCard(parseInt(el.dataset.iid, 10));
-        if (found) this.tooltip.scheduleShow(el, found.card.def);
+        if (found) this.tooltip.scheduleShow(el, found.card);
       };
       el.onmouseleave = () => this.tooltip.hide();
     });

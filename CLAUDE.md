@@ -207,20 +207,18 @@ them — MtG-correct).
 
 ## Implementation state (PDF cards)
 
-**Fully implemented (35):** Mountain, Swamp, Mountain Warrior, Boil, Rockslide,
+**Fully implemented (36):** Mountain, Swamp, Mountain Warrior, Boil, Rockslide,
 Blaze, Drain Life, Destroy Artifact, Conflagration, Erupt, Choking Fume,
 Beseech the Shadows, Share Blood, Touch of Zot, Immolate, Rockeater,
 Cavern Drake, Fire Drake, Fire Servant, Immolation Deathshaman, Mighty Serpent
 of the Vale, Fire Master, Pox, Walk on Coals, Ancestral Armor, Aunaratha,
 Press Into Service, Honor with Immortality, Come Home, Immortality,
 Smokeweaver, Grandfather Abas, Incinerate, Terror, Dishonored Ghoul,
-Staff of Pain, Read the Scars.
+Staff of Pain, Read the Scars, Simulacrum.
 
 **Test-only (not in PDF):** Normal Man (R, 1/1), Big Man (R, 2/2).
 
-**Not yet implemented (3 cards / 3 systems):**
-- **Simulacrum** — X life cost + ETB with X +1/+0 counters + conditional
-  Flying. Needs ETB triggers + counter-writes-on-ETB + conditional keyword.
+**Not yet implemented (2 cards / 2 systems):**
 - **Giant Vampire Bat** — "Whenever you attack" (different condition) +
   optional ("may") + tap-as-cost on a trigger.
 - **Grandmother Isa** — Static ability while in graveyard ("you may cast one

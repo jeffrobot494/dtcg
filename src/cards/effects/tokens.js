@@ -36,6 +36,20 @@ defineEffect('create_tokens', (match, ctx, params) => {
   match.notify(`${ctx.source.name} creates ${count} ${tmpl.name}${count !== 1 ? 's' : ''}.`);
 });
 
+// Press Into Service: exile one target creature card from a graveyard and
+// create one token from a fixed template. Combined into a single effect so
+// the token count matches actual exiles (not the X paid).
+// params: { template: {...} }
+defineEffect('exile_and_create_token', (match, ctx, params) => {
+  const target = ctx.target;
+  if (!target?.isCreature || target.zone?.name !== 'graveyard') return;
+  target.zone.remove(target);
+  target.owner.exile.add(target);
+  const tmpl = params.template ?? { name: 'Token', power: 1, toughness: 1 };
+  spawnToken(match, ctx.controller, makeTokenDef(tmpl));
+  match.notify(`${ctx.source.name} exiles ${target.name} and creates a ${tmpl.name}.`);
+});
+
 // Honor with Immortality: exiles the target creature card from a graveyard
 // and creates a "golem" token copying its name, power, and toughness but with
 // no abilities/triggers/keywords.

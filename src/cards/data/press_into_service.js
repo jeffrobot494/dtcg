@@ -6,12 +6,8 @@ export default {
   cost: { B: 2, x: 'mana' },
   effects: [
     {
-      id: 'exile_target',
+      id: 'exile_and_create_token',
       target: { type: 'creature_in_graveyard', count: 'x' },
-    },
-    {
-      id: 'create_tokens',
-      count: 'x',
       template: { name: 'Ghoul', type: 'creature', power: 2, toughness: 1, color: 'B' },
     },
   ],

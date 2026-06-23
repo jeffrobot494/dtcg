@@ -37,6 +37,7 @@ import incinerate from './incinerate.js';
 import terror from './terror.js';
 import dishonoredGhoul from './dishonored_ghoul.js';
 import readTheScars from './read_the_scars.js';
+import simulacrum from './simulacrum.js';
 
 const database = {
   mountain,
@@ -78,6 +79,7 @@ const database = {
   terror,
   dishonored_ghoul: dishonoredGhoul,
   read_the_scars: readTheScars,
+  simulacrum,
 };
 
 export function getCardDef(id) {

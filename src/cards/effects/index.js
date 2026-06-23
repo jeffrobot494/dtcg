@@ -15,5 +15,6 @@ import './return.js';
 import './regenerate.js';
 import './incinerate.js';
 import './read_the_scars.js';
+import './counters.js';
 
 export { getEffect, defineEffect } from './registry.js';
