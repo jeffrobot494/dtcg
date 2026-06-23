@@ -51,6 +51,7 @@ export function describeCard(input) {
   for (const trig of def.triggers ?? [])  rules.push(describeTrigger(trig));
   for (const ab of def.abilities ?? [])   rules.push(describeAbility(ab));
   for (const rep of def.replacements ?? []) rules.push(describeReplacement(rep));
+  for (const line of def.rulesText ?? []) rules.push(escape(line));
   if (def.partial) {
     rules.push('<em style="color:#fa6">(partial implementation)</em>');
   }
@@ -238,6 +239,7 @@ function formatActivationCost(cost) {
   const parts = [];
   if (cost.mana) parts.push(formatCostInline(cost.mana));
   if (cost.tap) parts.push('{T}');
+  if (cost.life) parts.push(`Pay ${cost.life} life`);
   return parts.join(', ') || '0';
 }
 

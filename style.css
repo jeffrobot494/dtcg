@@ -176,6 +176,12 @@ body {
   font-style: italic;
   margin-top: 2px;
 }
+.card-combat {
+  font-size: 0.7em;
+  color: #f88;
+  font-weight: bold;
+  margin-top: 2px;
+}
 
 .zone-counts {
   font-size: 0.75em;

@@ -134,7 +134,27 @@ export class BattleView {
     if (card.regenerationShields > 0) {
       parts.push(`<div class="card-regen">regen ×${card.regenerationShields}</div>`);
     }
+    const combatTag = this._combatAnnotation(card);
+    if (combatTag) parts.push(combatTag);
     return `<div class="${classes.join(' ')}" data-iid="${card.iid}">${parts.join('')}</div>`;
+  }
+
+  _combatAnnotation(card) {
+    const m = this.match;
+    const attackers = m.currentAttackers ?? [];
+    const blocks = m.currentBlocks ?? [];
+    if (attackers.includes(card)) {
+      const myBlockers = blocks.filter(b => b.attacker === card).map(b => b.blocker.name);
+      if (myBlockers.length > 0) {
+        return `<div class="card-combat">attacking · blocked by ${myBlockers.map(n => this.escape(n)).join(', ')}</div>`;
+      }
+      return `<div class="card-combat">attacking</div>`;
+    }
+    const blocking = blocks.find(b => b.blocker === card);
+    if (blocking) {
+      return `<div class="card-combat">blocking ${this.escape(blocking.attacker.name)}</div>`;
+    }
+    return '';
   }
 
   renderStack() {
@@ -205,6 +225,7 @@ export class BattleView {
         const costText = lifeCost ? ` (pay ${lifeCost} life)` : '';
         return `use ${name}'s ability${costText}?`;
       }
+      case 'discard': return 'choose a card from your hand to discard';
     }
     return req.kind;
   }
@@ -250,6 +271,10 @@ export class BattleView {
         return `
           <button data-act="confirm-trigger-yes">Yes</button>
           <button data-act="confirm-trigger-no">No</button>`;
+      case 'discard':
+        return `
+          <button data-act="cancel-discard">Cancel</button>
+          <small>Click a card in your hand to discard it.</small>`;
     }
     return '';
   }
@@ -349,6 +374,10 @@ export class BattleView {
         this.handleBlockerClick(card, owner, p);
         return;
       }
+      if (req.kind === 'discard' && card.zone === p.hand) {
+        p.agent.resolve(card);
+        return;
+      }
     }
   }
 
@@ -399,6 +428,12 @@ export class BattleView {
           actingPlayer.agent.resolve({ type: 'activate', card, abilityIndex: i });
           return;
         }
+      }
+    } else if (card.zone === actingPlayer.graveyard) {
+      // Grandmother Isa: cast a creature card from your graveyard. Engine
+      // re-validates (Isa enabler, per-turn flag, life, hand, mana).
+      if (sorcerySpeedOk && card.isCreature && canPayCost(actingPlayer.manaPool, card.cost)) {
+        actingPlayer.agent.resolve({ type: 'cast_from_graveyard', card });
       }
     }
   }
@@ -487,6 +522,13 @@ export class BattleView {
       for (const p of m.players) {
         if (p.agent.pending?.kind === 'confirm-trigger') {
           p.agent.resolve(value);
+          return;
+        }
+      }
+    } else if (act === 'cancel-discard') {
+      for (const p of m.players) {
+        if (p.agent.pending?.kind === 'discard') {
+          p.agent.resolve(null);
           return;
         }
       }

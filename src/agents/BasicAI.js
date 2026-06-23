@@ -56,6 +56,10 @@ export class BasicAI extends Agent {
     return this._pickBlockers(match, attackers);
   }
 
+  async chooseDiscard(match) {
+    return pickDiscardCard(this._meIn(match));
+  }
+
   // Default to yes unless paying would kill us. Engine has already verified
   // the cost is payable before asking.
   async confirmTrigger(match, source, trigger) {
@@ -85,8 +89,9 @@ export class BasicAI extends Agent {
         const ab = abilities[i];
         if (ab.kind !== 'activated') continue;
         if (!match.canActivate(c, ab, me)) continue;
+        if (!canSafelyPayLifeCost(me, ab)) continue;
         if (!abilityHasUsefulTargets(match, ab, me, c)) continue;
-        if (!activationIsWorthwhile(c, ab)) continue;
+        if (!activationIsWorthwhile(c, ab, match)) continue;
         return { type: 'activate', card: c, abilityIndex: i };
       }
     }
@@ -125,13 +130,14 @@ export class BasicAI extends Agent {
         // didn't fire it, conditions (sickness, tapped, etc.) aren't met.
         if (!ab.cost?.mana) continue;
         if (!canPayCost(potential, ab.cost.mana)) continue;
+        if (!canSafelyPayLifeCost(me, ab)) continue;
         if (ab.speed === 'sorcery') {
           if (me !== match.activePlayer) continue;
           if (!match.stack.isEmpty) continue;
           if (match.phase !== 'main1' && match.phase !== 'main2') continue;
         }
         if (!abilityHasUsefulTargets(match, ab, me, c)) continue;
-        if (!activationIsWorthwhile(c, ab)) continue;
+        if (!activationIsWorthwhile(c, ab, match)) continue;
         activationOptions.push({
           kind: 'activate', card: c, abilityIndex: i,
           cost: ab.cost.mana, mv: totalManaCost(ab.cost.mana),
@@ -139,7 +145,10 @@ export class BasicAI extends Agent {
       }
     }
 
-    const playable = [...spellOptions, ...activationOptions]
+    const graveyardCast = considerGraveyardCast(match, me, potential);
+    const graveyardOptions = graveyardCast ? [graveyardCast] : [];
+
+    const playable = [...spellOptions, ...activationOptions, ...graveyardOptions]
       .sort((a, b) => b.mv - a.mv);
 
     if (playable.length === 0) return { type: 'pass' };
@@ -154,6 +163,8 @@ export class BasicAI extends Agent {
         if (!(isXMana && hasUntapped)) {
           return { type: 'cast', card: target.card };
         }
+      } else if (target.kind === 'cast_from_graveyard') {
+        return { type: 'cast_from_graveyard', card: target.card };
       } else {
         return { type: 'activate', card: target.card, abilityIndex: target.abilityIndex };
       }
@@ -444,6 +455,14 @@ function totalManaCost(cost) {
 
 // For X-mana cards, returns true if the potential pool covers base + X=1.
 // X=0 casts of our scaling-effect cards do nothing, so skip them.
+// Don't activate life-cost abilities if doing so would leave us at 2 or less
+// life (mirrors the life-X cast heuristic). Engine.canActivate already blocks
+// outright suicide; this is the AI being conservative.
+function canSafelyPayLifeCost(player, ability) {
+  const cost = ability.cost?.life ?? 0;
+  return cost === 0 || player.life - cost > 2;
+}
+
 function affordsMeaningfulX(card, potential) {
   if (card.cost?.x !== 'mana') return true;
   const withOneX = { ...card.cost, generic: (card.cost.generic ?? 0) + 1 };
@@ -579,6 +598,53 @@ function simWouldKill(source, target) {
   return source.power >= (target.toughness - target.damage);
 }
 
+function valueOfCard(card) {
+  if (card.isCreature) return valueOfCreature(card);
+  return totalManaCost(card.cost);
+}
+
+// Lowest-value hand card to discard. Prefer lands once we have plenty.
+function pickDiscardCard(me) {
+  const totalLands = me.battlefield.cards.filter(c => c.isLand).length;
+  const lands = me.hand.cards.filter(c => c.isLand);
+  const spells = me.hand.cards.filter(c => !c.isLand);
+  if (totalLands >= 5 && lands.length > 0) return lands[0];
+  if (spells.length > 0) {
+    return [...spells].sort((a, b) => totalManaCost(a.cost) - totalManaCost(b.cost))[0];
+  }
+  return me.hand.cards[0] ?? null;
+}
+
+// Grandmother Isa: pick the best graveyard creature we can afford to recast.
+// Skip Isa herself (recasting her closes the door on further graveyard casts
+// this turn for no gain). Worth it only if the creature's value exceeds the
+// discard's value by enough to cover the 2-life cost.
+function considerGraveyardCast(match, me, potential) {
+  if (me.castFromGraveyardThisTurn) return null;
+  if (!me.graveyard.cards.some(c => c.def.id === 'grandmother_isa')) return null;
+  if (me.life < 3) return null;
+  if (me.hand.cards.length === 0) return null;
+
+  const candidates = me.graveyard.cards
+    .filter(c => c.isCreature && c.def.id !== 'grandmother_isa')
+    .filter(c => canPayCost(potential, c.cost))
+    .filter(c => affordsMeaningfulX(c, potential))
+    .sort((a, b) => valueOfCreature(b) - valueOfCreature(a));
+  if (candidates.length === 0) return null;
+  const creature = candidates[0];
+
+  const discard = pickDiscardCard(me);
+  if (!discard) return null;
+  if (valueOfCreature(creature) <= valueOfCard(discard) + 2) return null;
+
+  return {
+    kind: 'cast_from_graveyard',
+    card: creature,
+    cost: creature.cost,
+    mv: totalManaCost(creature.cost),
+  };
+}
+
 function valueOfCreature(card) {
   if (!card.isCreature) return 0;
   let v = card.power + card.toughness;
@@ -602,11 +668,40 @@ function allTargetsAvailable(match, card, controller) {
 // suppresses regen activation: the AI doesn't act on opponent's turn yet, and
 // shields expire at EOT, so pre-emptive shielding on its own turn wastes mana.
 // Revisit when the AI gets instant-speed responses.
-function activationIsWorthwhile(source, ability) {
+function activationIsWorthwhile(source, ability, match) {
   for (const eff of ability.effects ?? []) {
-    if (eff.id === 'add_regen_shield') return false;
+    if (eff.id === 'add_regen_shield') {
+      // One shield is enough to survive one death — don't double-pay.
+      if ((source.regenerationShields ?? 0) > 0) return false;
+      // Regen shields expire at end of turn, so pre-emptive activation wastes
+      // mana. Only worth firing when we know lethal is incoming right now.
+      if (!wouldDieInCombat(source, match)) return false;
+    }
   }
   return true;
+}
+
+// True if `source` is in combat (attacker or blocker) and is about to take
+// lethal damage based on current attackers/blocks. Used by regen-in-response.
+function wouldDieInCombat(source, match) {
+  if (match.combatStep !== 'after_blockers') return false;
+  const attackers = match.currentAttackers ?? [];
+  const blocks = match.currentBlocks ?? [];
+  const effectiveToughness = source.toughness - source.damage;
+
+  if (attackers.includes(source)) {
+    const blockers = blocks
+      .filter(b => b.attacker === source)
+      .map(b => b.blocker);
+    if (blockers.length === 0) return false;
+    const incoming = blockers.reduce((s, b) => s + b.power, 0);
+    return incoming >= effectiveToughness;
+  }
+
+  const blockingMe = blocks.find(b => b.blocker === source);
+  if (blockingMe) return blockingMe.attacker.power >= effectiveToughness;
+
+  return false;
 }
 
 function abilityHasUsefulTargets(match, ability, controller, source) {

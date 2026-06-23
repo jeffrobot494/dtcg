@@ -25,4 +25,5 @@ export class Agent {
   async declareAttackers(match) { throw new Error('not implemented'); }
   async declareBlockers(match, attackers) { throw new Error('not implemented'); }
   async confirmTrigger(match, source, trigger) { throw new Error('not implemented'); }
+  async chooseDiscard(match) { throw new Error('not implemented'); }
 }

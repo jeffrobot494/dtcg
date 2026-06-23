@@ -21,6 +21,10 @@ export class Match {
     this.stack = new Stack();
     this.stackZone = new Zone('stack', null, { visibleTo: 'all', layout: 'stack' });
     this.combatStep = null;
+    // Set during combat for agents that need to inspect the in-progress combat
+    // (e.g., AI regen-in-response heuristic).
+    this.currentAttackers = null;
+    this.currentBlocks = null;
     // Triggers queued by an event but not yet placed on the stack (targets
     // need to be chosen first). Drained by _processPendingTriggers.
     this._pendingTriggers = [];
@@ -57,9 +61,15 @@ export class Match {
       if (c.isCreature) c.summoningSick = false;
     }
     this.activePlayer.landPlayedThisTurn = false;
+    this.activePlayer.castFromGraveyardThisTurn = false;
     this.notify(`--- ${this.activePlayer.name}'s turn ${this.turn} ---`);
 
     this.phase = 'upkeep';
+    await this._firePhaseBegins('upkeep');
+    if (!this.stack.isEmpty) {
+      await this.priorityLoop();
+      if (this.gameOver) return;
+    }
 
     this.phase = 'draw';
     if (!(this.turn === 1 && this.activeIndex === 0)) {
@@ -146,6 +156,7 @@ export class Match {
       case 'play_land':       return this._actionPlayLand(player, action.card);
       case 'tap_for_mana':    return this._actionTapForMana(player, action.card);
       case 'cast':            return await this._actionCast(player, action.card);
+      case 'cast_from_graveyard': return await this._actionCastFromGraveyard(player, action.card);
       case 'activate':        return await this._actionActivate(player, action.card, action.abilityIndex ?? 0);
     }
     return false;
@@ -276,6 +287,102 @@ export class Match {
     return true;
   }
 
+  // Grandmother Isa: cast one creature from your graveyard per turn for the
+  // mana cost + 2 life + discard one. The "Isa is in your graveyard" enabler
+  // and the per-turn limit are checked here.
+  async _actionCastFromGraveyard(player, card) {
+    if (player !== this.activePlayer) return false;
+    if (!this.stack.isEmpty) return false;
+    if (this.phase !== 'main1' && this.phase !== 'main2') return false;
+    if (player.castFromGraveyardThisTurn) return false;
+    if (card.zone !== player.graveyard) return false;
+    if (!card.isCreature) return false;
+    if (player.life <= 2) return false;  // need to survive paying 2
+    if (player.hand.cards.length === 0) return false;
+    const isaInGraveyard = player.graveyard.cards.some(c => c.def.id === 'grandmother_isa');
+    if (!isaInGraveyard) return false;
+    if (!canPayCost(player.manaPool, card.cost)) return false;
+
+    // Gather X up front (same flow as _actionCast).
+    let xValue = 0;
+    if (card.cost?.x === 'mana') {
+      const maxX = maxXFromPool(player.manaPool, card.cost);
+      xValue = await player.agent.chooseXValue(this, card, maxX);
+      if (xValue == null || xValue < 0 || xValue > maxX) {
+        this.notify(`${player.name} cancels casting ${card.name}.`);
+        return false;
+      }
+    } else if (card.cost?.x === 'life') {
+      const maxX = player.life - 2;  // reserve the 2-life additional cost
+      xValue = await player.agent.chooseXValue(this, card, Math.max(0, maxX));
+      if (xValue == null || xValue < 0 || xValue > maxX) {
+        this.notify(`${player.name} cancels casting ${card.name}.`);
+        return false;
+      }
+    }
+    if (card.cost?.x) card.xValue = xValue;
+
+    // Targets.
+    const effects = card.def.effects ?? [];
+    const targets = [];
+    for (const effect of effects) {
+      if (!effect.target) { targets.push([null]); continue; }
+      const count = effect.target.count === 'x' ? (xValue ?? 0) : 1;
+      const picks = [];
+      for (let i = 0; i < count; i++) {
+        const t = await player.agent.chooseTarget(this, effect.target, card, effect, picks);
+        if (t == null) {
+          if (picks.length === 0) {
+            this.notify(`${player.name} cancels casting ${card.name}.`);
+            return false;
+          }
+          break;
+        }
+        if (!isValidTarget(t, effect.target, this, player)) {
+          this.notify(`Invalid target.`);
+          return false;
+        }
+        if (picks.includes(t)) continue;
+        picks.push(t);
+      }
+      targets.push(picks);
+    }
+
+    // Discard pick (additional cost). Cancellation here voids the cast — no
+    // mana/life paid yet.
+    const discardPick = await player.agent.chooseDiscard(this);
+    if (discardPick == null || discardPick.zone !== player.hand) {
+      this.notify(`${player.name} cancels casting ${card.name}.`);
+      return false;
+    }
+
+    // Pay all costs.
+    const effectiveCost = { ...card.cost };
+    if (card.cost?.x === 'mana' && xValue > 0) {
+      effectiveCost.generic = (effectiveCost.generic ?? 0) + xValue;
+    }
+    payCost(player.manaPool, effectiveCost);
+    if (card.cost?.x === 'life' && xValue > 0) {
+      player.life -= xValue;
+      this.notify(`${player.name} pays ${xValue} life.`);
+    }
+    player.life -= 2;
+    this.notify(`${player.name} pays 2 life (Isa).`);
+    player.hand.remove(discardPick);
+    player.graveyard.add(discardPick);
+    this.notify(`${player.name} discards ${discardPick.name}.`);
+
+    // Move the cast card from graveyard to battlefield.
+    player.graveyard.remove(card);
+    player.battlefield.add(card);
+    card.summoningSick = true;
+    player.castFromGraveyardThisTurn = true;
+    this.notify(`${player.name} casts ${card.name} from graveyard (paid ${formatCost(effectiveCost)} + 2 life + discard).`);
+    this._queueTriggersForEvent('creature_etb', { card });
+    await this._processPendingTriggers();
+    return true;
+  }
+
   // Predicate: can `player` legally pay the activation cost and meet timing
   // restrictions for `ability` on `card` right now?
   canActivate(card, ability, player) {
@@ -286,6 +393,7 @@ export class Match {
     // Summoning sickness blocks tap costs on creatures (MtG rule 302.1).
     if (ability.cost?.tap && card.isCreature && card.summoningSick) return false;
     if (ability.cost?.mana && !canPayCost(player.manaPool, ability.cost.mana)) return false;
+    if (ability.cost?.life && player.life <= ability.cost.life) return false;
     if (ability.speed === 'sorcery') {
       if (player !== this.activePlayer) return false;
       if (!this.stack.isEmpty) return false;
@@ -323,6 +431,10 @@ export class Match {
     // Pay activation cost: tap source, deduct mana.
     if (ability.cost?.tap) card.tapped = true;
     if (ability.cost?.mana) payCost(player.manaPool, ability.cost.mana);
+    if (ability.cost?.life) {
+      player.life -= ability.cost.life;
+      this.notify(`${player.name} pays ${ability.cost.life} life.`);
+    }
 
     this.stack.push({
       type: 'activated_ability',

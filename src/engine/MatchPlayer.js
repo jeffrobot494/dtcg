@@ -16,6 +16,9 @@ export class MatchPlayer {
     // Combat damage taken this turn (reset at end of turn). Used by triggers
     // like Read the Scars.
     this.combatDamageTakenThisTurn = 0;
+    // Grandmother Isa: has this player already cast a creature from the
+    // graveyard this turn? Reset at start of each of their turns.
+    this.castFromGraveyardThisTurn = false;
 
     this.library = new Zone('library', this, { visibleTo: 'none', layout: 'stack' });
     this.hand = new Zone('hand', this, { visibleTo: 'owner', layout: 'row' });

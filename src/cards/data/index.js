@@ -35,9 +35,11 @@ import smokeweaver from './smokeweaver.js';
 import grandfatherAbas from './grandfather_abas.js';
 import incinerate from './incinerate.js';
 import terror from './terror.js';
-import dishonoredGhoul from './dishonored_ghoul.js';
+import honoredGhoul from './honored_ghoul.js';
 import readTheScars from './read_the_scars.js';
 import simulacrum from './simulacrum.js';
+import giantVampireBat from './giant_vampire_bat.js';
+import grandmotherIsa from './grandmother_isa.js';
 
 const database = {
   mountain,
@@ -77,9 +79,11 @@ const database = {
   grandfather_abas: grandfatherAbas,
   incinerate,
   terror,
-  dishonored_ghoul: dishonoredGhoul,
+  honored_ghoul: honoredGhoul,
   read_the_scars: readTheScars,
   simulacrum,
+  giant_vampire_bat: giantVampireBat,
+  grandmother_isa: grandmotherIsa,
 };
 
 export function getCardDef(id) {

@@ -48,4 +48,8 @@ export class HumanAgent extends Agent {
   confirmTrigger(match, source, trigger) {
     return this._request('confirm-trigger', { source, trigger });
   }
+
+  chooseDiscard(match) {
+    return this._request('discard');
+  }
 }

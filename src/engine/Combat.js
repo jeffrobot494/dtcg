@@ -28,6 +28,7 @@ export async function runCombatPhase(match) {
     attackers = await match.activePlayer.agent.declareAttackers(match);
   }
   for (const c of attackers) c.tapped = true;
+  match.currentAttackers = attackers;
   if (attackers.length === 0) {
     match.notify(`${match.activePlayer.name} doesn't attack.`);
     match.combatStep = null;
@@ -71,6 +72,7 @@ export async function runCombatPhase(match) {
     return true;
   });
 
+  match.currentBlocks = blocks;
   // Snapshot which attackers were blocked BEFORE the priority window so the
   // "still blocked" rule applies if blockers are killed mid-priority.
   const blockedAttackers = new Set(blocks.map(b => b.attacker));
@@ -132,6 +134,8 @@ export async function runCombatPhase(match) {
   }
 
   match.combatStep = null;
+  match.currentAttackers = null;
+  match.currentBlocks = null;
   await match.checkStateBasedActions();
 }
 

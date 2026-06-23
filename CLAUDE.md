@@ -207,23 +207,16 @@ them — MtG-correct).
 
 ## Implementation state (PDF cards)
 
-**Fully implemented (36):** Mountain, Swamp, Mountain Warrior, Boil, Rockslide,
-Blaze, Drain Life, Destroy Artifact, Conflagration, Erupt, Choking Fume,
-Beseech the Shadows, Share Blood, Touch of Zot, Immolate, Rockeater,
-Cavern Drake, Fire Drake, Fire Servant, Immolation Deathshaman, Mighty Serpent
-of the Vale, Fire Master, Pox, Walk on Coals, Ancestral Armor, Aunaratha,
-Press Into Service, Honor with Immortality, Come Home, Immortality,
-Smokeweaver, Grandfather Abas, Incinerate, Terror, Dishonored Ghoul,
-Staff of Pain, Read the Scars, Simulacrum.
+**Fully implemented (38, all PDF cards):** Mountain, Swamp, Mountain Warrior,
+Boil, Rockslide, Blaze, Drain Life, Destroy Artifact, Conflagration, Erupt,
+Choking Fume, Beseech the Shadows, Share Blood, Touch of Zot, Immolate,
+Rockeater, Cavern Drake, Fire Drake, Fire Servant, Immolation Deathshaman,
+Mighty Serpent of the Vale, Fire Master, Pox, Walk on Coals, Ancestral Armor,
+Aunaratha, Press Into Service, Honor with Immortality, Come Home, Immortality,
+Smokeweaver, Grandfather Abas, Incinerate, Terror, Honored Ghoul,
+Staff of Pain, Read the Scars, Simulacrum, Giant Vampire Bat, Grandmother Isa.
 
 **Test-only (not in PDF):** Normal Man (R, 1/1), Big Man (R, 2/2).
-
-**Not yet implemented (2 cards / 2 systems):**
-- **Giant Vampire Bat** — "Whenever you attack" (different condition) +
-  optional ("may") + tap-as-cost on a trigger.
-- **Grandmother Isa** — Static ability while in graveyard ("you may cast one
-  creature spell from your graveyard each turn for +1 life"). Needs static
-  abilities from non-battlefield zones.
 
 ---
 
