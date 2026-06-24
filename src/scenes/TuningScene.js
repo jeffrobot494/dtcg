@@ -55,6 +55,11 @@ export class TuningScene {
           </div>
         `)}
 
+        ${this._section('Rules', `
+          ${this._checkboxRow('rules.decklessLoss',
+            'Lose when you can\'t draw a card', t.rules?.decklessLoss !== false)}
+        `)}
+
         ${this._section('Merchant', `
           ${this._numberRow('merchant.offerCount',    'Number of offers',     t.merchant.offerCount)}
           ${this._numberRow('merchant.buyMultiplier', 'Buy multiplier (× MV)', t.merchant.buyMultiplier)}

@@ -1,15 +1,23 @@
 import { DeckLibrary, DECK_TAGS } from '../state/DeckLibrary.js';
+import { Campaign } from '../state/Campaign.js';
 import database from '../cards/data/index.js';
 import { formatCost, manaValue } from '../engine/Cost.js';
 import { CardTooltip } from '../ui/CardTooltip.js';
 
 // GUI deck editor. Click a library card to add 1 copy, right-click to remove.
-// Active/opponent toggles save instantly; card/name edits go through Save.
+//
+// Two modes:
+//   'library'    — sandbox/dev. Lists all decks; library pool is the full
+//                  card database. Used to build enemy decks + the
+//                  player_starting template.
+//   'collection' — campaign. No deck list; edits Campaign.activeDeck only,
+//                  with the library pool restricted to Campaign.collection.
 
 export class DeckEditorScene {
-  constructor(root, manager) {
+  constructor(root, manager, context = {}) {
     this.root = root;
     this.manager = manager;
+    this.mode = context.mode === 'collection' ? 'collection' : 'library';
     this.tooltip = new CardTooltip();
 
     this.selectedId = null;
@@ -29,9 +37,38 @@ export class DeckEditorScene {
   }
 
   mount() {
-    const decks = DeckLibrary.list();
-    if (decks.length > 0) this._loadDeck(decks[0].id);
+    if (this.mode === 'collection') {
+      this._loadActiveDeck();
+    } else {
+      const decks = DeckLibrary.list();
+      if (decks.length > 0) this._loadDeck(decks[0].id);
+    }
     this.render();
+  }
+
+  // ---------- collection-mode helpers ----------
+
+  // Builds a working copy from Campaign.activeDeck (a flat list of card ids).
+  _loadActiveDeck() {
+    const c = Campaign.all();
+    const ids = c?.activeDeck ?? [];
+    const cardsByCount = new Map();
+    for (const id of ids) cardsByCount.set(id, (cardsByCount.get(id) ?? 0) + 1);
+    const cards = [...cardsByCount.entries()];
+    this.selectedId = '__active_deck__';
+    this.workingCopy = { name: 'Active deck', cards };
+    this.savedSnapshot = { name: 'Active deck', cards: cloneCards(cards) };
+  }
+
+  // Map of cardId → count owned in the player's collection. Only relevant in
+  // collection mode.
+  _collectionCounts() {
+    const counts = new Map();
+    const c = Campaign.all();
+    for (const id of (c?.collection ?? [])) {
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    return counts;
   }
 
   unmount() {
@@ -68,6 +105,12 @@ export class DeckEditorScene {
 
   _addCard(cardId) {
     if (!this.workingCopy) return;
+    // Collection mode: cap each card at the count owned in the collection.
+    if (this.mode === 'collection') {
+      const owned = this._collectionCounts().get(cardId) ?? 0;
+      const inDeck = this.workingCopy.cards.find(([id]) => id === cardId)?.[1] ?? 0;
+      if (inDeck >= owned) return;
+    }
     const cards = this.workingCopy.cards;
     const entry = cards.find(([id]) => id === cardId);
     if (entry) entry[1] += 1;
@@ -87,10 +130,18 @@ export class DeckEditorScene {
 
   _save() {
     if (!this.workingCopy || !this.selectedId) return;
-    DeckLibrary.update(this.selectedId, {
-      name: this.workingCopy.name,
-      cards: cloneCards(this.workingCopy.cards),
-    });
+    if (this.mode === 'collection') {
+      const flat = [];
+      for (const [id, count] of this.workingCopy.cards) {
+        for (let i = 0; i < count; i++) flat.push(id);
+      }
+      Campaign.setActiveDeck(flat);
+    } else {
+      DeckLibrary.update(this.selectedId, {
+        name: this.workingCopy.name,
+        cards: cloneCards(this.workingCopy.cards),
+      });
+    }
     this.savedSnapshot = { name: this.workingCopy.name, cards: cloneCards(this.workingCopy.cards) };
     this.render();
   }
@@ -132,25 +183,35 @@ export class DeckEditorScene {
 
   render() {
     this.tooltip.hide();
-    const decks = DeckLibrary.list();
     const wc = this.workingCopy;
     const unsaved = this._hasUnsavedChanges();
 
-    this.root.innerHTML = `
-      <div class="deck-editor">
-        <div class="deck-list-pane">
-          <div class="section-label">My decks</div>
-          <div class="deck-list">${this._renderDeckList(decks)}</div>
-          <div class="deck-list-actions">
-            <button data-act="new-deck">+ New deck</button>
-            <button data-act="delete-deck" ${this.selectedId ? '' : 'disabled'}>Delete</button>
+    if (this.mode === 'collection') {
+      this.root.innerHTML = `
+        <div class="deck-editor deck-editor-collection">
+          <div class="deck-edit-pane">
+            ${wc ? this._renderEditPane(wc, unsaved) : '<div class="empty-state">No active campaign.</div>'}
           </div>
         </div>
-        <div class="deck-edit-pane">
-          ${wc ? this._renderEditPane(wc, unsaved) : '<div class="empty-state">No deck selected. Click "+ New deck" to make one.</div>'}
+      `;
+    } else {
+      const decks = DeckLibrary.list();
+      this.root.innerHTML = `
+        <div class="deck-editor">
+          <div class="deck-list-pane">
+            <div class="section-label">My decks</div>
+            <div class="deck-list">${this._renderDeckList(decks)}</div>
+            <div class="deck-list-actions">
+              <button data-act="new-deck">+ New deck</button>
+              <button data-act="delete-deck" ${this.selectedId ? '' : 'disabled'}>Delete</button>
+            </div>
+          </div>
+          <div class="deck-edit-pane">
+            ${wc ? this._renderEditPane(wc, unsaved) : '<div class="empty-state">No deck selected. Click "+ New deck" to make one.</div>'}
+          </div>
         </div>
-      </div>
-    `;
+      `;
+    }
     this._attachHandlers();
   }
 
@@ -174,12 +235,44 @@ export class DeckEditorScene {
   }
 
   _renderEditPane(wc, unsaved) {
+    const total = wc.cards.reduce((s, [, n]) => s + n, 0);
+    const countsById = new Map(wc.cards);
+
+    if (this.mode === 'collection') {
+      const owned = this._collectionCounts();
+      const poolCards = this.libraryCards.filter(def => (owned.get(def.id) ?? 0) > 0);
+      return `
+        <div class="edit-header">
+          <div class="edit-row">
+            <strong>Editing active deck</strong>
+            <small class="hint-inline">Showing cards from your collection. Click to add to deck, right-click to remove. "× N / M" = in deck / owned.</small>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">Your collection (${poolCards.length} unique cards)</div>
+          <div class="lib-grid">
+            ${poolCards.map(def => this._renderLibCard(def, countsById.get(def.id) ?? 0, owned.get(def.id) ?? 0)).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">Active deck (${total} cards)${unsaved ? ' <span class="unsaved-note">— unsaved</span>' : ''}</div>
+          ${this._renderDeckContents(wc.cards)}
+        </div>
+
+        <div class="edit-actions">
+          <button data-act="save" ${unsaved ? '' : 'disabled'}>Save</button>
+          <button data-act="discard" ${unsaved ? '' : 'disabled'}>Discard changes</button>
+          <button data-act="back-to-camp">Back to camp</button>
+        </div>
+      `;
+    }
+
     const activeId = DeckLibrary.getActiveId();
     const oppId = DeckLibrary.getOpponentId();
     const isActive = this.selectedId === activeId;
     const isOpp = this.selectedId === oppId;
-    const total = wc.cards.reduce((s, [, n]) => s + n, 0);
-    const countsById = new Map(wc.cards);
 
     const currentTag = DeckLibrary.get(this.selectedId)?.tag ?? null;
     const tagOptions = ['<option value="">(none)</option>']
@@ -225,10 +318,15 @@ export class DeckEditorScene {
     `;
   }
 
-  _renderLibCard(def, count) {
+  _renderLibCard(def, count, owned) {
     const cost = formatCost(def.cost);
     const stats = def.type === 'creature' ? `${def.power}/${def.toughness}` : '';
-    const countBadge = count > 0 ? `<div class="lib-card-count">×${count}</div>` : '';
+    let countBadge = '';
+    if (owned !== undefined) {
+      countBadge = `<div class="lib-card-count">×${count} / ${owned}</div>`;
+    } else if (count > 0) {
+      countBadge = `<div class="lib-card-count">×${count}</div>`;
+    }
     return `
       <div class="card ${def.type} lib-card" data-card-id="${def.id}">
         <div class="card-name">${esc(def.name)}</div>
@@ -339,6 +437,14 @@ export class DeckEditorScene {
       tagSelect.onchange = () => {
         DeckLibrary.setTag(this.selectedId, tagSelect.value || null);
         this.render();
+      };
+    }
+
+    const backBtn = get('back-to-camp');
+    if (backBtn) {
+      backBtn.onclick = () => {
+        if (!this._confirmDiscard()) return;
+        this.manager.switchTo('camp');
       };
     }
   }

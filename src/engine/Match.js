@@ -10,7 +10,9 @@ import { Card } from '../cards/Card.js';
 import database from '../cards/data/index.js';
 
 export class Match {
-  constructor(players) {
+  // options: { decklessLoss?: boolean }  — default true. When false, drawing
+  // from an empty library is a no-op instead of an instant loss.
+  constructor(players, options = {}) {
     this.players = players;
     this.activeIndex = 0;
     this.turn = 1;
@@ -19,6 +21,7 @@ export class Match {
     this.winner = null;
     this.log = [];
     this.onUpdate = null;
+    this.decklessLoss = options.decklessLoss !== false;
 
     this.stack = new Stack();
     this.stackZone = new Zone('stack', null, { visibleTo: 'all', layout: 'stack' });
@@ -786,9 +789,13 @@ export class Match {
 
   drawCard(player) {
     if (player.library.size === 0) {
-      this.gameOver = true;
-      this.winner = this.opponentOf(player);
-      this.notify(`${player.name} can't draw — loses.`);
+      if (this.decklessLoss) {
+        this.gameOver = true;
+        this.winner = this.opponentOf(player);
+        this.notify(`${player.name} can't draw — loses.`);
+      } else {
+        this.notify(`${player.name} can't draw (empty library — rule disabled).`);
+      }
       return;
     }
     const card = player.library.drawTop();

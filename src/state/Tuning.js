@@ -27,6 +27,9 @@ export const DEFAULTS = Object.freeze({
     sellMultiplier: 1.5,
     pool: 'all', // 'all' | 'non_red' | 'black_only' | 'random_subset'
   },
+  rules: {
+    decklessLoss: true, // lose when you can't draw a card
+  },
 });
 
 let state = null;
