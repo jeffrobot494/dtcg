@@ -1297,3 +1297,119 @@ The vertical slice should include:
 ## 16. One-Sentence Design Summary
 
 A black mage prepares for an impossible battle against three red sorcerors by choosing which dangerous nodes to clear from a camp-based map, constantly trading life, cards, materials, morality, and equipment for enough power to survive the final fight.
+
+---
+
+## 17. Alpha Slice Scope
+
+This section documents the **alpha version** of the vertical slice — a focused, tunable cut of the design above intended to validate the core loop (persistent life + permanent graveyard loss + open node selection) before investing in the full slice's content and systems.
+
+The full design above remains the destination. The alpha is a checkpoint along the way.
+
+### Map contents (alpha)
+
+Five nodes only:
+
+1. **Camp** — switchboard. Edit active deck, view collection, start a new run.
+2. **Wandering Merchant** — buy and sell cards. Refreshes on node clear.
+3. **Ashroad Pyromancer** — solo red burn sorceror.
+4. **Emberhide Beastmaster** — solo red creature sorceror.
+5. **Black Rival** — solo black mirror-match sorceror.
+6. **Red Council (Final Boss)** — single red sorceror with **50 life** and **3 Mountains in play at game start**. No mid-battle phase transitions, no second/third mage. Tunable.
+
+### Mechanics included
+
+- Persistent player **life** across battles.
+- Persistent player **deck** and **collection** across battles (collection is the master inventory; active deck is the subset taken into battle).
+- **Permanent graveyard loss**: cards in the player's graveyard at battle end are removed from both deck and collection.
+- **Looting**: defeating a sorceror adds all cards remaining in that sorceror's deck to the player's collection. Toggleable via tuning.
+- **Gold rewards** per sorceror, set per node in tuning.
+- **Merchant**: buy/sell cards. Inventory refreshes on node clear. Pricing formula and pool tunable.
+- **Save / load** to localStorage.
+- **Game-over** screen on death and on boss defeat. New-run button wipes campaign state.
+
+### Mechanics explicitly excluded
+
+The alpha **does not** include:
+
+- Crafting and crafting ingredients
+- Healing items (in-battle or out-of-battle)
+- Equipment slots (ring / amulet / staff)
+- Legendary creature battles
+- Treasure monster battles
+- Cave commitment node
+- Village raid and Paladin ambush
+- Multi-opponent boss (the alpha boss is a single sorceror with custom life + starting battlefield)
+- Mid-battle player joins
+- Retreat from battle
+- Defender keyword and walls
+- Protection / resistance keywords
+- Creature subtypes (Zombie, Skeleton, Snake, etc.)
+- Free healing at camp or between nodes
+
+The player's only source of life recovery in the alpha is in-battle lifelink and similar effects from black cards. This is intentionally tight to validate whether the no-free-healing rule produces interesting pressure.
+
+### Tooling for tuning
+
+The alpha is built as a **playtesting tool**. The author can adjust every important value without code changes:
+
+- **Tag system on decks.** Each deck in the deck library can carry one of five reserved tags: `player_starting`, `ashroad`, `emberhide`, `black_rival`, `boss`. Tagging is unique — assigning a tag transfers it from any previous holder. Tag lookup drives which deck each node uses at battle start.
+- **Dual-mode deck editor.**
+  - *Library mode* (accessible via the Decks nav button) — used for editing enemy decks and the `player_starting` template. Library pool is the full card database.
+  - *Collection mode* (accessible from Camp during a run) — used by the player to build their active deck. Library pool is the current campaign collection only.
+- **Tuning page** — a dedicated scene exposing:
+  - Starting life and starting gold
+  - Per-node gold rewards
+  - "Loot remaining deck on win" toggle
+  - Boss starting life and starting battlefield (configurable list of card ids)
+  - Merchant offer count, buy/sell pricing formulas, and card pool filter
+  - Reset campaign / reset tuning / export–import JSON
+
+Tuning values persist independently of the active campaign, so adjusting a knob does not wipe a run.
+
+### Scenes (alpha)
+
+1. **MapScene** — campaign hub. Lists the 5 nodes with status and cleared markers.
+2. **CampScene** — sub-scene reached from Map. Switchboard for deck editing and new-run.
+3. **MerchantScene** — sub-scene reached from Map. Two-column buy/sell UI.
+4. **BattleScene** — existing battle UI, extended to consume a `BattleConfig` (deck, starting life, starting battlefield) and report results back to the campaign layer.
+5. **GameOverScene** — terminal state for death or victory.
+6. **TuningScene** — top-level tuning page.
+7. **DeckEditorScene** — existing, extended with a mode parameter (library vs collection).
+
+Top-level scenes reached via the persistent nav bar: **Map**, **Decks**, **Tuning**.
+
+### Build phasing
+
+The alpha is built in three sequential PRs:
+
+- **PR 1 — Infrastructure.** Tag system on decks, Tuning state + scene, engine extensions (custom starting life, pre-placed battlefield). No gameplay loop yet, but every tunable surface is in place.
+- **PR 2 — Campaign loop.** Campaign state, Map / Camp / GameOver scenes, dual-mode deck editor, graveyard attrition. Playable end-to-end without the merchant. The merchant node is visible but disabled.
+- **PR 3 — Merchant.** Merchant scene, gold rewards on node clear, merchant refresh logic. Closes the economy loop.
+
+### What the alpha is meant to answer
+
+Specifically, the alpha is intended to test these subset questions from Section 14:
+
+1. Does permanent graveyard loss create exciting pressure, or does it feel too punitive?
+2. Does persistent life make every battle feel meaningful?
+3. Does the absence of free healing create good survival tension?
+4. Does the open node map create interesting route planning without physical navigation?
+5. Does the merchant refresh system make the economy feel alive?
+
+Questions about crafting, healing items, equipment, legendary creatures, the cave, the village raid, the Paladin ambush, multi-mage boss tension, and replayability across multiple runs are **deferred** to subsequent slices.
+
+### Promotion path
+
+After alpha playtesting, the slice is expected to grow toward the full vertical slice by adding (in any order):
+
+- Crafting + materials + healing items
+- Equipment slots
+- Treasure monster nodes
+- Legendary creature nodes
+- Cave commitment node
+- Village raid + Paladin ambush
+- Multi-opponent boss (two starting mages + third mage arrival)
+- Retreat action
+
+Each addition can land independently against the alpha foundation. The tag system, tuning page, and campaign state are designed to absorb these additions without restructuring.
