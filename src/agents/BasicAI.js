@@ -103,12 +103,16 @@ export class BasicAI extends Agent {
 
   async chooseXValue(match, card, max) {
     // Mana X: when X is a target count (count: 'x'), don't pay for more X
-    // than there are valid targets — extra mana would create nothing. For
-    // amount-style X (damage etc.), dumping everything is correct.
+    // than there are valid targets. For amount-style X (damage), pick X based
+    // on the target we intend to hit — exact lethal on a creature, dump on
+    // a player face.
     if (card.cost?.x === 'mana') {
       const me = this._meIn(match);
       const cap = xTargetCountCap(card, match, me);
-      return cap === null ? max : Math.min(max, cap);
+      if (cap !== null) return Math.min(max, cap);
+      const smart = this._smartDamageX(card, match, me, max);
+      if (smart !== null) return smart;
+      return max;
     }
     // Life X: target 5 (Simulacrum's Flying threshold) but always leave a
     // 2-life buffer so we don't suicide on the cost.
@@ -131,6 +135,25 @@ export class BasicAI extends Agent {
 
   async chooseDiscard(match) {
     return pickDiscardCard(this._meIn(match));
+  }
+
+  // Preview which target _pickTarget would choose if we paid the full max X,
+  // then size X to that target. Returns null if the card isn't an X-damage
+  // spell (caller should fall back to a max-dump).
+  _smartDamageX(card, match, me, max) {
+    const eff = card.def.effects?.find(e =>
+      X_DAMAGE_EFFECTS.includes(e.id) && e.amount === 'x'
+    );
+    if (!eff) return null;
+    const savedX = card.xValue;
+    card.xValue = max;
+    const target = this._pickTarget(match, eff.target, card, eff, []);
+    card.xValue = savedX;
+    if (!target) return null;
+    if (target.isPlayer) return max;  // face: dump for chip / lethal
+    // Creature: exact lethal, capped at max.
+    const needed = Math.max(1, target.toughness - target.damage);
+    return Math.min(max, needed);
   }
 
   // Default to yes unless paying would kill us. Engine has already verified
@@ -287,6 +310,17 @@ export class BasicAI extends Agent {
     }
     if (candidates.length === 0) return null;
 
+    // Unified usefulness filter. Keeps the cast-decision gate (hasUsefulTarget)
+    // and the pick-decision in sync: any constraint added to isUsefulTarget
+    // automatically applies to both. Per-effect branches below can focus on
+    // ranking the surviving candidates rather than also filtering them.
+    if (effect) {
+      const useful = candidates.filter(t => isUsefulTarget(effect, t, me, source));
+      if (useful.length === 0) return null;
+      candidates.length = 0;
+      candidates.push(...useful);
+    }
+
     // For heal-style effects, prefer the most damaged creature.
     if (effect?.id === 'remove_damage') {
       const damaged = candidates.filter(t => !t.isPlayer && t.damage > 0);
@@ -408,6 +442,8 @@ export class BasicAI extends Agent {
     }
 
     // Fall through: must be a friendly target (buff/heal-style filter).
+    // The upstream isUsefulTarget filter has already excluded friendly burn
+    // targets, so damage effects can never end up here with own creatures.
     const friends = candidates.filter(t => t === me || t.controller === me);
     if (friends.length > 0) {
       const myCreatures = friends.filter(t => t.isCreature);
@@ -1024,8 +1060,9 @@ function isUsefulTarget(effect, target, controller, source) {
     return true;
   }
   if (effect.id === 'deal_damage' || effect.id === 'drain_life') {
-    // Don't burn a creature whose controller could just regenerate it.
-    // Players and non-creatures bypass this check (no regen to dodge).
+    // Never burn our own creatures.
+    if (target.controller === controller) return false;
+    // Players and non-creatures bypass the regen check (no regen to dodge).
     if (target.isPlayer || !target.isCreature) return true;
     const damage = estimateBurnDamage(effect);
     const effective = target.toughness - target.damage;
