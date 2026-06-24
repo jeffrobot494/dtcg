@@ -1308,14 +1308,19 @@ The full design above remains the destination. The alpha is a checkpoint along t
 
 ### Map contents (alpha)
 
-Five nodes only:
+Eight nodes:
 
 1. **Camp** — switchboard. Edit active deck, view collection, start a new run.
 2. **Wandering Merchant** — buy and sell cards. Refreshes on node clear.
-3. **Ashroad Pyromancer** — solo red burn sorceror.
-4. **Emberhide Beastmaster** — solo red creature sorceror.
-5. **Black Rival** — solo black mirror-match sorceror.
-6. **Red Council (Final Boss)** — single red sorceror with **50 life** and **3 Mountains in play at game start**. No mid-battle phase transitions, no second/third mage. Tunable.
+3. **Ashroad Pyromancer** — solo sorceror (suggested: red burn).
+4. **Emberhide Beastmaster** — solo sorceror (suggested: red creatures).
+5. **Black Rival** — solo sorceror (suggested: black mirror).
+6. **Hollow Acolyte** — solo sorceror (deck to be tuned).
+7. **Veiled Hierophant** — solo sorceror (deck to be tuned).
+8. **Wandering Heretic** — solo sorceror (deck to be tuned).
+9. **Red Council (Final Boss)** — single red sorceror with **50 life** and **3 Mountains in play at game start**. No mid-battle phase transitions, no second/third mage. Tunable.
+
+The three new sorcerors have color-agnostic names so the author can assign any deck identity to them via tags.
 
 ### Mechanics included
 

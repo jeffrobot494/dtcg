@@ -1,5 +1,5 @@
 import { Agent } from './Agent.js';
-import { canPayCost } from '../engine/Cost.js';
+import { canPayCost, maxXFromPool } from '../engine/Cost.js';
 import { isValidTarget } from '../engine/Targeting.js';
 import { canBlock } from '../engine/Combat.js';
 
@@ -181,6 +181,10 @@ export class BasicAI extends Agent {
       .filter(c => canPayCost(potential, c.cost))
       .filter(c => allTargetsAvailable(match, c, me))
       .filter(c => affordsMeaningfulX(c, potential))
+      // Hold X-mana damage spells (Blaze, Drain Life) unless max-affordable X
+      // does something meaningful: lethal, 5+ face damage, or kills a worthy
+      // creature. Stops X=1 face-pings on turn 2.
+      .filter(c => xDamageIsWorthCasting(c, potential, match, me))
       // Don't cast equipment with no creature to wear it — its only value is
       // the equip ability, and that needs a target.
       .filter(c => c.def.subtype !== 'equipment' || haveCreatureOnBattlefield)
@@ -604,6 +608,33 @@ function countValidTargets(match, filter, controller) {
   return n;
 }
 
+// Effects whose damage scales with X. xDamageIsWorthCasting gates them on
+// max-affordable X doing something meaningful.
+const X_DAMAGE_EFFECTS = ['deal_damage', 'drain_life'];
+
+function xDamageIsWorthCasting(card, potential, match, controller) {
+  if (card.cost?.x !== 'mana') return true;
+  const eff = card.def.effects?.find(e =>
+    X_DAMAGE_EFFECTS.includes(e.id) && e.amount === 'x'
+  );
+  if (!eff) return true;
+  const maxX = maxXFromPool(potential, card.cost);
+  if (maxX <= 0) return false;
+  const opp = match.opponentOf(controller);
+  // Lethal to opponent.
+  if (isValidTarget(opp, eff.target, match, controller) && maxX >= opp.life) return true;
+  // Big chunk of face damage (5+).
+  if (isValidTarget(opp, eff.target, match, controller) && maxX >= 5) return true;
+  // Kills a worthy enemy creature (value ≥ 3 skips dink 1/1s).
+  for (const c of opp.battlefield.cards) {
+    if (!c.isCreature) continue;
+    if (!isValidTarget(c, eff.target, match, controller)) continue;
+    if (valueOfCreature(c) < 3) continue;
+    if (maxX >= (c.toughness - c.damage)) return true;
+  }
+  return false;
+}
+
 function affordsMeaningfulX(card, potential) {
   if (card.cost?.x !== 'mana') return true;
   const withOneX = { ...card.cost, generic: (card.cost.generic ?? 0) + 1 };
@@ -803,6 +834,11 @@ function allTargetsAvailable(match, card, controller) {
     } else if (effect.filter) {
       // Filter-based AOE / mass effect: at least one battlefield card must match.
       if (!hasAnyMatchingFilter(match, effect.filter, controller)) return false;
+      // For damage AOEs (Erupt, Choking Fume): also require a positive value
+      // swing — opponent must lose more than we do. Otherwise it's a self-wrath.
+      if (effect.id === 'damage_to_all' && !damageAoeIsValueWin(match, effect, controller)) {
+        return false;
+      }
     }
   }
   return true;
@@ -817,6 +853,27 @@ function hasAnyMatchingFilter(match, filter, controller) {
   return false;
 }
 
+// True if a damage_to_all effect would cost the opponent more creature
+// value than us. X-based amounts aren't evaluated here (X is chosen later);
+// those default to "ok to cast".
+function damageAoeIsValueWin(match, effect, controller) {
+  const amount = typeof effect.amount === 'number' ? effect.amount : null;
+  if (amount === null) return true;
+  const opp = match.opponentOf(controller);
+  const mine = sumDyingValue(controller, effect.filter, amount, match);
+  const theirs = sumDyingValue(opp, effect.filter, amount, match);
+  return theirs > mine;
+}
+
+function sumDyingValue(player, filter, damage, match) {
+  let total = 0;
+  for (const c of player.battlefield.cards) {
+    if (!isValidTarget(c, filter, match, player)) continue;
+    if (damage >= (c.toughness - c.damage)) total += valueOfCreature(c);
+  }
+  return total;
+}
+
 // Same idea as allTargetsAvailable but for activated-ability effects.
 // Per-ability sanity check (in addition to "has useful targets"). Currently
 // suppresses regen activation: the AI doesn't act on opponent's turn yet, and
@@ -828,8 +885,11 @@ function activationIsWorthwhile(source, ability, match) {
       // One shield is enough to survive one death — don't double-pay.
       if ((source.regenerationShields ?? 0) > 0) return false;
       // Regen shields expire at end of turn, so pre-emptive activation wastes
-      // mana. Only worth firing when we know lethal is incoming right now.
-      if (!wouldDieInCombat(source, match)) return false;
+      // mana. Worth firing only when lethal is actually incoming — either from
+      // combat or from a damage spell/ability already on the stack.
+      if (!wouldDieInCombat(source, match) && !wouldDieFromIncomingStack(source, match)) {
+        return false;
+      }
     }
   }
   return true;
@@ -856,6 +916,48 @@ function wouldDieInCombat(source, match) {
   if (blockingMe) return blockingMe.attacker.power >= effectiveToughness;
 
   return false;
+}
+
+// True if cumulative damage from spells/abilities currently on the stack
+// would kill `source`. Used by regen-in-response on the opponent's turn —
+// e.g., player casts Rockslide on our Honored Ghoul → AI sees lethal on the
+// stack and regens before resolution.
+function wouldDieFromIncomingStack(source, match) {
+  if (!source.isCreature) return false;
+  const effective = source.toughness - source.damage;
+  if (effective <= 0) return false;
+  let incoming = 0;
+  for (const item of match.stack.items ?? []) {
+    incoming += incomingDamageToTarget(item, source, match);
+  }
+  return incoming >= effective;
+}
+
+function incomingDamageToTarget(stackItem, target, match) {
+  const effects = stackItem.effects ?? [];
+  const targets = stackItem.targets ?? [];
+  const x = stackItem.x ?? 0;
+  let total = 0;
+  for (let i = 0; i < effects.length; i++) {
+    const eff = effects[i];
+    const picks = targets[i] ?? [null];
+    const amount = resolveStaticAmount(eff.amount, x);
+    if (amount <= 0) continue;
+    if (eff.id === 'deal_damage' || eff.id === 'drain_life') {
+      if (picks.includes(target)) total += amount;
+    } else if (eff.id === 'damage_to_all') {
+      if (isValidTarget(target, eff.filter, match, stackItem.controller)) {
+        total += amount;
+      }
+    }
+  }
+  return total;
+}
+
+function resolveStaticAmount(amount, x) {
+  if (amount === 'x')      return x ?? 0;
+  if (amount === 'half_x') return Math.ceil((x ?? 0) / 2);
+  return amount ?? 0;
 }
 
 function abilityHasUsefulTargets(match, ability, controller, source) {

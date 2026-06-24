@@ -134,6 +134,8 @@ function describeEffect(eff) {
       return `Return this card to its owner's hand.`;
     case 'register_scars_trigger':
       return `At the beginning of your end step, draw cards equal to the amount of combat damage dealt to your opponent this turn.`;
+    case 'drain_life':
+      return `Deals ${describeAmount(eff.amount)} damage to ${describeFilter(eff.target)}. You gain life equal to the damage dealt, capped at the target's remaining toughness (or remaining life, if a player).`;
     case 'put_counter_on_self': {
       const n = describeAmount(eff.amount);
       const c = eff.counter ?? '+1/+1';

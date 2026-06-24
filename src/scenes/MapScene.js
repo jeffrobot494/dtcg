@@ -6,10 +6,13 @@ import { DeckLibrary } from '../state/DeckLibrary.js';
 // If no campaign is active, prompts to start one.
 
 const NODE_LABELS = {
-  ashroad:     { name: 'Ashroad Pyromancer',    flavor: 'Red Burn' },
-  emberhide:   { name: 'Emberhide Beastmaster', flavor: 'Red Creatures' },
-  black_rival: { name: 'Black Rival',           flavor: 'Black Mirror' },
-  boss:        { name: 'Red Council',           flavor: '50 life, 3 Mountains in play' },
+  ashroad:            { name: 'Ashroad Pyromancer',    flavor: 'Red Burn' },
+  emberhide:          { name: 'Emberhide Beastmaster', flavor: 'Red Creatures' },
+  black_rival:        { name: 'Black Rival',           flavor: 'Black Mirror' },
+  hollow_acolyte:     { name: 'Hollow Acolyte',        flavor: '' },
+  veiled_hierophant:  { name: 'Veiled Hierophant',     flavor: '' },
+  wandering_heretic:  { name: 'Wandering Heretic',     flavor: '' },
+  boss:               { name: 'Red Council',           flavor: '50 life, 3 Mountains in play' },
 };
 
 export class MapScene {
@@ -74,6 +77,9 @@ export class MapScene {
           ${this._renderBattleNode('ashroad', c, terminal)}
           ${this._renderBattleNode('emberhide', c, terminal)}
           ${this._renderBattleNode('black_rival', c, terminal)}
+          ${this._renderBattleNode('hollow_acolyte', c, terminal)}
+          ${this._renderBattleNode('veiled_hierophant', c, terminal)}
+          ${this._renderBattleNode('wandering_heretic', c, terminal)}
 
           <div class="map-node-group">— Final —</div>
           ${this._renderBattleNode('boss', c, terminal)}
@@ -100,9 +106,9 @@ export class MapScene {
       <div class="map-node">
         <div class="map-node-label">
           <strong>Wandering Merchant</strong>
-          <span class="map-node-flavor">Buy / sell cards (coming in PR 3)</span>
+          <span class="map-node-flavor">Buy / sell cards. Refreshes on node clear.</span>
         </div>
-        <button disabled>Enter</button>
+        <button data-act="enter-merchant">Enter</button>
       </div>
     `;
   }
@@ -152,6 +158,9 @@ export class MapScene {
 
     const enterCamp = this.root.querySelector('[data-act="enter-camp"]');
     if (enterCamp) enterCamp.onclick = () => this.manager.switchTo('camp');
+
+    const enterMerchant = this.root.querySelector('[data-act="enter-merchant"]');
+    if (enterMerchant) enterMerchant.onclick = () => this.manager.switchTo('merchant');
 
     for (const nodeId of NODE_IDS) {
       const btn = this.root.querySelector(`[data-act="fight-${nodeId}"]`);

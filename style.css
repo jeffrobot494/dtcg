@@ -662,3 +662,51 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   padding: 8px 16px; border-radius: 3px; cursor: pointer;
 }
 .gameover-actions button:nth-child(2) { background: #444; }
+
+/* MerchantScene */
+.merchant-scene {
+  max-width: 1000px;
+  padding: 16px;
+  color: #ddd;
+}
+.merchant-scene h2 { color: #fff; margin: 0 0 12px 0; }
+.merchant-header {
+  display: flex; gap: 18px; align-items: center;
+  background: #1e1e1e; border: 1px solid #444; border-radius: 4px;
+  padding: 10px 14px; margin-bottom: 12px;
+}
+.merchant-header strong { color: #fc8; }
+.merchant-header button {
+  margin-left: auto;
+  background: #444; color: #ddd; border: 1px solid #555;
+  padding: 6px 14px; border-radius: 3px; cursor: pointer;
+}
+.merchant-header button:hover { background: #555; }
+.merchant-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.merchant-col {
+  background: #1e1e1e; border: 1px solid #444; border-radius: 4px;
+  padding: 10px 14px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.merchant-list { display: flex; flex-direction: column; gap: 4px; }
+.merchant-row {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #252525; border: 1px solid #383838; border-radius: 3px;
+  padding: 6px 10px;
+}
+.merchant-row-info { display: flex; flex-direction: column; gap: 1px; }
+.merchant-meta { color: #888; font-size: 0.8em; }
+.merchant-row-action { display: flex; align-items: center; gap: 8px; }
+.merchant-price { color: #fc8; font-weight: bold; min-width: 36px; text-align: right; }
+.merchant-row-action button {
+  background: #648; color: #fff; border: none;
+  padding: 4px 10px; border-radius: 3px; cursor: pointer;
+  font-size: 0.85em;
+}
+.merchant-row-action button:hover:not(:disabled) { background: #759; }
+.merchant-row-action button:disabled { opacity: 0.4; cursor: not-allowed; }

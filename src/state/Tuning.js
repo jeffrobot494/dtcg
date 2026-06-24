@@ -11,10 +11,13 @@ export const DEFAULTS = Object.freeze({
   },
   rewards: {
     lootRemainingDeck: true,
-    ashroad:     { gold: 10 },
-    emberhide:   { gold: 10 },
-    black_rival: { gold: 15 },
-    boss:        { gold: 0 },
+    ashroad:            { gold: 10 },
+    emberhide:          { gold: 10 },
+    black_rival:        { gold: 15 },
+    hollow_acolyte:     { gold: 10 },
+    veiled_hierophant:  { gold: 10 },
+    wandering_heretic:  { gold: 10 },
+    boss:               { gold: 0 },
   },
   boss: {
     startingLife: 50,

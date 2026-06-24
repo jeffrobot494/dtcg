@@ -4,6 +4,7 @@ import { DeckEditorScene } from './scenes/DeckEditorScene.js';
 import { TuningScene } from './scenes/TuningScene.js';
 import { MapScene } from './scenes/MapScene.js';
 import { CampScene } from './scenes/CampScene.js';
+import { MerchantScene } from './scenes/MerchantScene.js';
 import { GameOverScene } from './scenes/GameOverScene.js';
 import { initDeckLibrary } from './state/DeckLibrary.js';
 import { initTuning } from './state/Tuning.js';
@@ -21,6 +22,7 @@ sm.register('tuning',   'Tuning',  (root, mgr, ctx) => new TuningScene(root, mgr
 // Camp and GameOver are sub-scenes reached only via in-game navigation; they
 // stay off the nav bar.
 sm.registerHidden('camp',     (root, mgr, ctx) => new CampScene(root, mgr, ctx));
+sm.registerHidden('merchant', (root, mgr, ctx) => new MerchantScene(root, mgr, ctx));
 sm.registerHidden('gameover', (root, mgr, ctx) => new GameOverScene(root, mgr, ctx));
 
 sm.switchTo('map');

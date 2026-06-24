@@ -15,6 +15,9 @@ export const DECK_TAGS = [
   'ashroad',
   'emberhide',
   'black_rival',
+  'hollow_acolyte',
+  'veiled_hierophant',
+  'wandering_heretic',
   'boss',
 ];
 

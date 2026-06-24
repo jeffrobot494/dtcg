@@ -102,10 +102,13 @@ export class BattleScene {
 
   _opponentName(nodeId) {
     switch (nodeId) {
-      case 'ashroad':     return 'Ashroad Pyromancer';
-      case 'emberhide':   return 'Emberhide Beastmaster';
-      case 'black_rival': return 'Black Rival';
-      case 'boss':        return 'Red Council';
+      case 'ashroad':            return 'Ashroad Pyromancer';
+      case 'emberhide':          return 'Emberhide Beastmaster';
+      case 'black_rival':        return 'Black Rival';
+      case 'hollow_acolyte':     return 'Hollow Acolyte';
+      case 'veiled_hierophant':  return 'Veiled Hierophant';
+      case 'wandering_heretic':  return 'Wandering Heretic';
+      case 'boss':               return 'Red Council';
     }
     return 'Opponent';
   }
@@ -154,7 +157,14 @@ export class BattleScene {
     const playerGraveyardCardIds = player.graveyard.cards
       .filter(c => !c.def.isToken)
       .map(c => c.def.id);
-    const opponentRemainingCards = opponent.library.cards
+    // Loot: everything the opponent had except their graveyard. Library,
+    // battlefield (including any starting-battlefield cards), and hand.
+    // Tokens excluded since they cease to exist.
+    const opponentRemainingCards = [
+      ...opponent.library.cards,
+      ...opponent.battlefield.cards,
+      ...opponent.hand.cards,
+    ]
       .filter(c => !c.def.isToken)
       .map(c => c.def.id);
 
