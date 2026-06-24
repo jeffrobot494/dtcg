@@ -1,6 +1,6 @@
 import { isValidTarget, describeFilter } from '../engine/Targeting.js';
 import { canBlock } from '../engine/Combat.js';
-import { canPayCost, formatCost, formatPool } from '../engine/Cost.js';
+import { formatCost, formatPool } from '../engine/Cost.js';
 import { CardTooltip } from './CardTooltip.js';
 
 // BattleView renders the entire battle in plain HTML and routes clicks to
@@ -435,20 +435,16 @@ export class BattleView {
     const sorcerySpeedOk = isActive && stackEmpty && inMain;
 
     if (card.zone === actingPlayer.hand) {
-      const affordable = canPayCost(actingPlayer.manaPool, card.cost);
+      // canExecute uses the engine's potential-pool check, so a click on a
+      // spell with untapped lands is fine — the engine auto-taps inside
+      // _actionCast.
+      const castable = m.canExecute(actingPlayer, { type: 'cast', card });
       if (card.isLand) {
         if (sorcerySpeedOk && !actingPlayer.landPlayedThisTurn) {
           actingPlayer.agent.resolve({ type: 'play_land', card });
         }
-      } else if (card.def.type === 'instant') {
-        if (affordable) {
-          actingPlayer.agent.resolve({ type: 'cast', card });
-        }
-      } else {
-        // Anything else (creature, sorcery, artifact, enchantment) is sorcery speed.
-        if (sorcerySpeedOk && affordable) {
-          actingPlayer.agent.resolve({ type: 'cast', card });
-        }
+      } else if (castable) {
+        actingPlayer.agent.resolve({ type: 'cast', card });
       }
     } else if (card.zone === actingPlayer.battlefield) {
       if (card.isLand && !card.tapped) {
@@ -467,8 +463,8 @@ export class BattleView {
       }
     } else if (card.zone === actingPlayer.graveyard) {
       // Grandmother Isa: cast a creature card from your graveyard. Engine
-      // re-validates (Isa enabler, per-turn flag, life, hand, mana).
-      if (sorcerySpeedOk && card.isCreature && canPayCost(actingPlayer.manaPool, card.cost)) {
+      // re-validates everything (Isa enabler, per-turn flag, life, hand, mana).
+      if (m.canExecute(actingPlayer, { type: 'cast_from_graveyard', card })) {
         actingPlayer.agent.resolve({ type: 'cast_from_graveyard', card });
       }
     }

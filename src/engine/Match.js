@@ -225,19 +225,76 @@ export class Match {
 
   _actionTapForMana(player, card) {
     if (!this._canTapForMana(player, card)) return false;
-    const manaAbility = card.def.abilities.find(a => a.kind === 'mana');
-    card.tapped = true;
-    const produces = manaAbility.produces ?? {};
-    for (const [color, amount] of Object.entries(produces)) {
+    this._doTap(player, card);
+    return true;
+  }
+
+  // Single tap effect: marks land tapped, adds its mana to the pool, notifies.
+  // Shared by manual tap action and the engine's auto-tap inside cast/activate.
+  _doTap(player, land) {
+    const ability = land.def.abilities.find(a => a.kind === 'mana');
+    land.tapped = true;
+    for (const [color, amount] of Object.entries(ability.produces ?? {})) {
       player.manaPool[color] = (player.manaPool[color] ?? 0) + amount;
     }
-    this.notify(`${player.name} taps ${card.name} for mana (pool: ${formatPool(player.manaPool)}).`);
+    this.notify(`${player.name} taps ${land.name} for mana (pool: ${formatPool(player.manaPool)}).`);
+  }
+
+  // The mana pool a player COULD have if they tapped every untapped land they
+  // control right now. Used for "can I afford this?" gates and maxX dialogs so
+  // the agent doesn't have to pre-tap speculatively.
+  _potentialPool(player) {
+    const pool = { ...player.manaPool };
+    for (const c of player.battlefield.cards) {
+      if (!c.isLand || c.tapped) continue;
+      const ability = c.def.abilities?.find(a => a.kind === 'mana');
+      if (!ability) continue;
+      for (const [color, amount] of Object.entries(ability.produces ?? {})) {
+        pool[color] = (pool[color] ?? 0) + amount;
+      }
+    }
+    return pool;
+  }
+
+  // Tap untapped lands until the pool covers `cost`. Color-prefer lands that
+  // produce a deficit color first, then any. Returns true on success, false
+  // if even with all untapped lands the cost can't be met (caller should
+  // have validated via _potentialPool first).
+  _autoTapForCost(player, cost) {
+    let safety = 100;
+    while (!canPayCost(player.manaPool, cost)) {
+      if (safety-- <= 0) return false;
+      const land = this._pickLandToAutoTap(player, cost);
+      if (!land) return false;
+      this._doTap(player, land);
+    }
     return true;
+  }
+
+  _pickLandToAutoTap(player, cost) {
+    const untapped = player.battlefield.cards.filter(c =>
+      c.isLand && !c.tapped && c.def.abilities?.some(a => a.kind === 'mana')
+    );
+    if (untapped.length === 0) return null;
+    // Try to satisfy a colored deficit first.
+    for (const color of ['R', 'B']) {
+      const need = (cost[color] ?? 0) - (player.manaPool[color] ?? 0);
+      if (need <= 0) continue;
+      const match = untapped.find(land => {
+        const ability = land.def.abilities.find(a => a.kind === 'mana');
+        return (ability?.produces?.[color] ?? 0) > 0;
+      });
+      if (match) return match;
+    }
+    // Otherwise any land helps (generic mana).
+    return untapped[0];
   }
 
   _canCast(player, card) {
     if (!card || card.zone !== player.hand) return false;
-    if (!canPayCost(player.manaPool, card.cost)) return false;
+    // Affordability is checked against the potential pool (current + everything
+    // we could tap right now). The engine auto-taps inside _actionCast.
+    if (!canPayCost(this._potentialPool(player), card.cost)) return false;
     const isSorcerySpeed = card.def.type !== 'instant';
     if (isSorcerySpeed) {
       if (player !== this.activePlayer) return false;
@@ -249,7 +306,9 @@ export class Match {
 
   async _actionCast(player, card) {
     if (card.zone !== player.hand) return false;
-    if (!canPayCost(player.manaPool, card.cost)) return false;
+    // Affordability is checked against the potential pool; the engine will
+    // auto-tap below right before payment.
+    if (!canPayCost(this._potentialPool(player), card.cost)) return false;
 
     // Anything that's not an instant is sorcery speed (creatures, sorceries,
     // artifacts, enchantments).
@@ -263,7 +322,7 @@ export class Match {
     // Gather X value before targets. Cancellation costs nothing.
     let xValue = 0;
     if (card.cost?.x === 'mana') {
-      const maxX = maxXFromPool(player.manaPool, card.cost);
+      const maxX = maxXFromPool(this._potentialPool(player), card.cost);
       xValue = await player.agent.chooseXValue(this, card, maxX);
       if (xValue == null || xValue < 0 || xValue > maxX) {
         this.notify(`${player.name} cancels casting ${card.name}.`);
@@ -316,6 +375,12 @@ export class Match {
     if (card.cost?.x === 'mana' && xValue > 0) {
       effectiveCost.generic = (effectiveCost.generic ?? 0) + xValue;
     }
+    // Auto-tap any missing mana, then pay. Aborts if (shouldn't happen — we
+    // already passed the potential-pool check above) tapping can't cover.
+    if (!this._autoTapForCost(player, effectiveCost)) {
+      this.notify(`${player.name} can't afford ${card.name}.`);
+      return false;
+    }
     payCost(player.manaPool, effectiveCost);
     if (card.cost?.x === 'life' && xValue > 0) {
       player.life -= xValue;
@@ -358,7 +423,7 @@ export class Match {
     if (player.life <= 2) return false;
     if (player.hand.cards.length === 0) return false;
     if (!player.graveyard.cards.some(c => c.def.id === 'grandmother_isa')) return false;
-    if (!canPayCost(player.manaPool, card.cost)) return false;
+    if (!canPayCost(this._potentialPool(player), card.cost)) return false;
     return true;
   }
 
@@ -368,7 +433,7 @@ export class Match {
     // Gather X up front (same flow as _actionCast).
     let xValue = 0;
     if (card.cost?.x === 'mana') {
-      const maxX = maxXFromPool(player.manaPool, card.cost);
+      const maxX = maxXFromPool(this._potentialPool(player), card.cost);
       xValue = await player.agent.chooseXValue(this, card, maxX);
       if (xValue == null || xValue < 0 || xValue > maxX) {
         this.notify(`${player.name} cancels casting ${card.name}.`);
@@ -418,10 +483,14 @@ export class Match {
       return false;
     }
 
-    // Pay all costs.
+    // Pay all costs. Auto-tap any missing mana first.
     const effectiveCost = { ...card.cost };
     if (card.cost?.x === 'mana' && xValue > 0) {
       effectiveCost.generic = (effectiveCost.generic ?? 0) + xValue;
+    }
+    if (!this._autoTapForCost(player, effectiveCost)) {
+      this.notify(`${player.name} can't afford ${card.name}.`);
+      return false;
     }
     payCost(player.manaPool, effectiveCost);
     if (card.cost?.x === 'life' && xValue > 0) {
@@ -454,7 +523,7 @@ export class Match {
     if (ability.cost?.tap && card.tapped) return false;
     // Summoning sickness blocks tap costs on creatures (MtG rule 302.1).
     if (ability.cost?.tap && card.isCreature && card.summoningSick) return false;
-    if (ability.cost?.mana && !canPayCost(player.manaPool, ability.cost.mana)) return false;
+    if (ability.cost?.mana && !canPayCost(this._potentialPool(player), ability.cost.mana)) return false;
     if (ability.cost?.life && player.life <= ability.cost.life) return false;
     if (ability.speed === 'sorcery') {
       if (player !== this.activePlayer) return false;
@@ -490,9 +559,15 @@ export class Match {
       targets.push(picks);
     }
 
-    // Pay activation cost: tap source, deduct mana.
+    // Pay activation cost: tap source, auto-tap lands for mana, deduct.
     if (ability.cost?.tap) card.tapped = true;
-    if (ability.cost?.mana) payCost(player.manaPool, ability.cost.mana);
+    if (ability.cost?.mana) {
+      if (!this._autoTapForCost(player, ability.cost.mana)) {
+        this.notify(`${player.name} can't afford to activate ${card.name}.`);
+        return false;
+      }
+      payCost(player.manaPool, ability.cost.mana);
+    }
     if (ability.cost?.life) {
       player.life -= ability.cost.life;
       this.notify(`${player.name} pays ${ability.cost.life} life.`);
