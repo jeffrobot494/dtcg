@@ -53,16 +53,12 @@ export class BasicAI extends Agent {
         if (match.canActivate(c, ab, me)) {
           return { type: 'activate', card: c, abilityIndex: i };
         }
-        // canActivate failed — could it succeed if we first tapped a land
-        // for mana? Check by temporarily swapping in the potential pool.
+        // canActivate failed — could a tap fix it? Only if mana is the only
+        // missing resource (other gates are unaffected by mana).
         if (!ab.cost?.mana) continue;
-        const realPool = me.manaPool;
-        me.manaPool = potentialPool(me);
-        const okAfterTap = match.canActivate(c, ab, me);
-        me.manaPool = realPool;
-        if (!okAfterTap) continue;
-        const land = pickLandToTap(me, { cost: ab.cost.mana });
-        if (land) return { type: 'tap_for_mana', card: land };
+        if (!canActivateGivenPotential(c, ab, me, match)) continue;
+        const step = tapTowardCost(me, ab.cost.mana);
+        if (step) return step;
       }
     }
     const burn = this._reactiveBurn(match, me);
@@ -91,11 +87,9 @@ export class BasicAI extends Agent {
         for (const att of attackers) {
           if (!isValidTarget(att, eff.target, match, me)) continue;
           if (amount < (att.toughness - att.damage)) continue;
-          if (canPayCost(me.manaPool, card.cost)) {
-            return { type: 'cast', card };
-          }
-          const land = pickLandToTap(me, card);
-          if (land) return { type: 'tap_for_mana', card: land };
+          const step = tapTowardCost(me, card.cost);
+          if (step === false) continue;
+          return step ?? { type: 'cast', card };
         }
       }
     }
@@ -231,38 +225,37 @@ export class BasicAI extends Agent {
     if (playable.length === 0) return { type: 'pass' };
     const target = playable[0];
 
-    // 3. If we have enough mana RIGHT NOW, do it — but for X-mana spells, tap
-    //    any remaining lands first so X is as large as useful. If X is target-
-    //    count-capped, stop tapping once we have enough for that cap.
-    if (canPayCost(me.manaPool, target.cost)) {
-      if (target.kind === 'cast') {
-        const isXMana = target.cost?.x === 'mana';
-        const hasUntapped = me.battlefield.cards.some(c => c.isLand && !c.tapped);
-        let shouldKeepTapping = isXMana && hasUntapped;
-        if (shouldKeepTapping) {
-          const cap = xTargetCountCap(target.card, match, me);
-          if (cap !== null) {
-            const needed = totalManaCost(target.cost) + cap;
-            const inPool = totalManaCost(me.manaPool);
-            if (inPool >= needed) shouldKeepTapping = false;
-          }
+    // 3. Tap toward base cost; for X-mana, keep tapping past base until we
+    //    hit either the target-count cap (Press Into Service with N graveyard
+    //    creatures) or run out of untapped lands (Blaze, Drain Life).
+    if (target.kind === 'cast') {
+      const baseTap = tapTowardCost(me, target.cost);
+      if (baseTap) return baseTap;  // tap step or false-skip handled below
+      if (baseTap === false) return { type: 'pass' };
+      // baseTap === null: base cost is in pool. Decide whether to keep tapping
+      // for X.
+      const isXMana = target.cost?.x === 'mana';
+      const hasUntapped = me.battlefield.cards.some(c => c.isLand && !c.tapped);
+      if (isXMana && hasUntapped) {
+        const cap = xTargetCountCap(target.card, match, me);
+        const needed = cap === null ? Infinity : totalManaCost(target.cost) + cap;
+        const inPool = totalManaCost(me.manaPool);
+        if (inPool < needed) {
+          const land = pickLandToTap(me, target.card);
+          if (land) return { type: 'tap_for_mana', card: land };
         }
-        if (!shouldKeepTapping) {
-          return { type: 'cast', card: target.card };
-        }
-      } else if (target.kind === 'cast_from_graveyard') {
-        return { type: 'cast_from_graveyard', card: target.card };
-      } else {
-        return { type: 'activate', card: target.card, abilityIndex: target.abilityIndex };
       }
+      return { type: 'cast', card: target.card };
     }
-
-    // 4. Otherwise tap a land toward the target's cost.
-    const fakeCard = target.kind === 'cast' ? target.card : { cost: target.cost };
-    const land = pickLandToTap(me, fakeCard);
-    if (land) return { type: 'tap_for_mana', card: land };
-
-    return { type: 'pass' };
+    if (target.kind === 'cast_from_graveyard') {
+      const tap = tapTowardCost(me, target.cost);
+      if (tap === false) return { type: 'pass' };
+      return tap ?? { type: 'cast_from_graveyard', card: target.card };
+    }
+    // activate
+    const tap = tapTowardCost(me, target.cost);
+    if (tap === false) return { type: 'pass' };
+    return tap ?? { type: 'activate', card: target.card, abilityIndex: target.abilityIndex };
   }
 
   _pickTarget(match, filter, source, effect, picks = []) {
@@ -532,6 +525,27 @@ function pickLandToTap(player, targetCard) {
   }
   // No colored deficit — generic mana, any land is fine.
   return untapped[0];
+}
+
+// If the player's current pool already covers `cost`, returns null (no tap
+// needed). Else if their untapped lands can cover it, returns a tap_for_mana
+// action toward the deficit. Else returns false (unaffordable).
+function tapTowardCost(player, cost) {
+  if (canPayCost(player.manaPool, cost)) return null;
+  if (!canPayCost(potentialPool(player), cost)) return false;
+  const land = pickLandToTap(player, { cost });
+  return land ? { type: 'tap_for_mana', card: land } : false;
+}
+
+// Like Match.canActivate but checks against the player's full potential mana
+// pool (current pool + everything they could tap right now). Used to decide
+// whether tapping a land would unblock an activation.
+function canActivateGivenPotential(card, ability, player, match) {
+  const real = player.manaPool;
+  player.manaPool = potentialPool(player);
+  const ok = match.canActivate(card, ability, player);
+  player.manaPool = real;
+  return ok;
 }
 
 function potentialPool(player) {

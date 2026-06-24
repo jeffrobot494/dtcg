@@ -120,7 +120,10 @@ export class Match {
   // Two consecutive passes:
   //   - stack non-empty -> resolve top, active gets priority back
   //   - stack empty -> phase ends
-  // After a non-pass action, priority stays with the actor (they may keep going).
+  // After a successful non-pass action, priority stays with the actor.
+  // An action the engine refuses (executeAction returns false) is treated as
+  // a pass so priority advances — this prevents infinite loops if an agent
+  // ever emits an action the engine won't run.
   async priorityLoop() {
     let prioritized = this.activePlayer;
     let consecutivePasses = 0;
@@ -129,24 +132,26 @@ export class Match {
       this.notify();
       const action = await prioritized.agent.choosePriorityAction(this);
 
-      if (action.type === 'pass') {
-        consecutivePasses++;
-        if (consecutivePasses >= 2) {
-          if (this.stack.isEmpty) return;
-          await this.resolveTopOfStack();
-          await this.checkStateBasedActions();
-          consecutivePasses = 0;
-          prioritized = this.activePlayer;
-        } else {
-          prioritized = this.opponentOf(prioritized);
-        }
-      } else {
+      let passed = action.type === 'pass';
+      if (!passed) {
         const happened = await this.executeAction(prioritized, action);
         if (happened) {
           await this.checkStateBasedActions();
           consecutivePasses = 0;
+          continue;  // priority stays with the actor
         }
-        // Priority stays with the actor regardless.
+        passed = true;  // rejected — treat as pass
+      }
+
+      consecutivePasses++;
+      if (consecutivePasses >= 2) {
+        if (this.stack.isEmpty) return;
+        await this.resolveTopOfStack();
+        await this.checkStateBasedActions();
+        consecutivePasses = 0;
+        prioritized = this.activePlayer;
+      } else {
+        prioritized = this.opponentOf(prioritized);
       }
     }
   }
@@ -162,12 +167,37 @@ export class Match {
     return false;
   }
 
-  _actionPlayLand(player, card) {
+  // Dry-run predicate: would `action` succeed if executed right now?
+  // Mirrors the early-return checks in each _action* method. Agents call this
+  // to avoid emitting actions the engine would reject (cheap to call). Note:
+  // for 'cast'/'cast_from_graveyard' it only checks pre-target preconditions;
+  // an action that passes here can still cancel during target collection.
+  canExecute(player, action) {
+    switch (action?.type) {
+      case 'pass':               return true;
+      case 'play_land':          return this._canPlayLand(player, action.card);
+      case 'tap_for_mana':       return this._canTapForMana(player, action.card);
+      case 'cast':               return this._canCast(player, action.card);
+      case 'cast_from_graveyard':return this._canCastFromGraveyard(player, action.card);
+      case 'activate': {
+        const ab = action.card?.abilities?.[action.abilityIndex ?? 0];
+        return this.canActivate(action.card, ab, player);
+      }
+    }
+    return false;
+  }
+
+  _canPlayLand(player, card) {
     if (player !== this.activePlayer) return false;
     if (!this.stack.isEmpty) return false;
     if (this.phase !== 'main1' && this.phase !== 'main2') return false;
     if (player.landPlayedThisTurn) return false;
-    if (!card.isLand || card.zone !== player.hand) return false;
+    if (!card?.isLand || card.zone !== player.hand) return false;
+    return true;
+  }
+
+  _actionPlayLand(player, card) {
+    if (!this._canPlayLand(player, card)) return false;
     player.hand.remove(card);
     player.battlefield.add(card);
     player.landPlayedThisTurn = true;
@@ -175,17 +205,34 @@ export class Match {
     return true;
   }
 
-  _actionTapForMana(player, card) {
-    if (card.tapped || !card.isLand || card.zone !== player.battlefield) return false;
+  _canTapForMana(player, card) {
+    if (!card || card.tapped || !card.isLand || card.zone !== player.battlefield) return false;
     if (card.controller !== player) return false;
     const manaAbility = card.def.abilities?.find(a => a.kind === 'mana');
-    if (!manaAbility) return false;
+    return !!manaAbility;
+  }
+
+  _actionTapForMana(player, card) {
+    if (!this._canTapForMana(player, card)) return false;
+    const manaAbility = card.def.abilities.find(a => a.kind === 'mana');
     card.tapped = true;
     const produces = manaAbility.produces ?? {};
     for (const [color, amount] of Object.entries(produces)) {
       player.manaPool[color] = (player.manaPool[color] ?? 0) + amount;
     }
     this.notify(`${player.name} taps ${card.name} for mana (pool: ${formatPool(player.manaPool)}).`);
+    return true;
+  }
+
+  _canCast(player, card) {
+    if (!card || card.zone !== player.hand) return false;
+    if (!canPayCost(player.manaPool, card.cost)) return false;
+    const isSorcerySpeed = card.def.type !== 'instant';
+    if (isSorcerySpeed) {
+      if (player !== this.activePlayer) return false;
+      if (!this.stack.isEmpty) return false;
+      if (this.phase !== 'main1' && this.phase !== 'main2') return false;
+    }
     return true;
   }
 
@@ -290,18 +337,22 @@ export class Match {
   // Grandmother Isa: cast one creature from your graveyard per turn for the
   // mana cost + 2 life + discard one. The "Isa is in your graveyard" enabler
   // and the per-turn limit are checked here.
-  async _actionCastFromGraveyard(player, card) {
+  _canCastFromGraveyard(player, card) {
     if (player !== this.activePlayer) return false;
     if (!this.stack.isEmpty) return false;
     if (this.phase !== 'main1' && this.phase !== 'main2') return false;
     if (player.castFromGraveyardThisTurn) return false;
-    if (card.zone !== player.graveyard) return false;
+    if (!card || card.zone !== player.graveyard) return false;
     if (!card.isCreature) return false;
-    if (player.life <= 2) return false;  // need to survive paying 2
+    if (player.life <= 2) return false;
     if (player.hand.cards.length === 0) return false;
-    const isaInGraveyard = player.graveyard.cards.some(c => c.def.id === 'grandmother_isa');
-    if (!isaInGraveyard) return false;
+    if (!player.graveyard.cards.some(c => c.def.id === 'grandmother_isa')) return false;
     if (!canPayCost(player.manaPool, card.cost)) return false;
+    return true;
+  }
+
+  async _actionCastFromGraveyard(player, card) {
+    if (!this._canCastFromGraveyard(player, card)) return false;
 
     // Gather X up front (same flow as _actionCast).
     let xValue = 0;
