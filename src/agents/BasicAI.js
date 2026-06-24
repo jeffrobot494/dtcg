@@ -1023,5 +1023,42 @@ function isUsefulTarget(effect, target, controller, source) {
     }
     return true;
   }
+  if (effect.id === 'deal_damage' || effect.id === 'drain_life') {
+    // Don't burn a creature whose controller could just regenerate it.
+    // Players and non-creatures bypass this check (no regen to dodge).
+    if (target.isPlayer || !target.isCreature) return true;
+    const damage = estimateBurnDamage(effect);
+    const effective = target.toughness - target.damage;
+    if (damage < effective) return true;  // non-lethal — regen wouldn't matter
+    if (couldRegenerate(target)) return false;
+    return true;
+  }
   return true;
+}
+
+// Conservative damage estimate for the regen-burn check. Numeric amounts are
+// taken as-is; X-based amounts are treated as lethal (the AI normally dumps
+// max X on cast, so the burn is likely to kill).
+function estimateBurnDamage(effect) {
+  const a = effect.amount;
+  if (typeof a === 'number') return a;
+  return Infinity;
+}
+
+// True if `creature` could be saved by activating a regen ability — already
+// has a shield, or has an activated add_regen_shield ability whose cost the
+// controller can pay right now from their potential pool.
+function couldRegenerate(creature) {
+  if ((creature.regenerationShields ?? 0) > 0) return true;
+  const controller = creature.controller;
+  if (!controller) return false;
+  for (const ab of (creature.abilities ?? [])) {
+    if (ab.kind !== 'activated') continue;
+    if (!ab.effects?.some(e => e.id === 'add_regen_shield')) continue;
+    const lifeCost = ab.cost?.life ?? 0;
+    if (lifeCost > 0 && controller.life <= lifeCost) continue;
+    if (ab.cost?.mana && !canPayCost(potentialPool(controller), ab.cost.mana)) continue;
+    return true;
+  }
+  return false;
 }
