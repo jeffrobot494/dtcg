@@ -13,6 +13,8 @@ export class BattleView {
     this.selectedAttackers = new Set();
     this.selectedBlocker = null;
     this.blocks = [];
+    // Hide the opponent's hand by default — flipping the toggle peeks at it.
+    this.hideOpponentHand = true;
 
     this.tooltip = new CardTooltip();
 
@@ -38,7 +40,15 @@ export class BattleView {
       return;
     }
 
-    html.push(`<div class="phase">Turn ${m.turn} — ${m.activePlayer.name}'s <b>${m.phase}</b> phase${m.combatStep ? ' — ' + m.combatStep : ''}</div>`);
+    html.push(`
+      <div class="phase">
+        <span>Turn ${m.turn} — ${m.activePlayer.name}'s <b>${m.phase}</b> phase${m.combatStep ? ' — ' + m.combatStep : ''}</span>
+        <label class="phase-toggle">
+          <input type="checkbox" data-act="toggle-hide-opp-hand" ${this.hideOpponentHand ? 'checked' : ''}>
+          Hide opponent's hand
+        </label>
+      </div>
+    `);
     html.push(`<div class="layout">`);
     html.push(`<div class="board">`);
     html.push(this.renderPlayer(m.players[1]));   // opponent on top
@@ -68,7 +78,7 @@ export class BattleView {
           ${isActive ? '<span style="color:#fc0">(active)</span>' : ''}
           ${p.agent.pending ? '<span style="color:#0c8">(priority)</span>' : ''}
         </div>
-        ${this.renderZone(p, 'hand')}
+        ${this.renderHand(p)}
         ${this.renderBattlefield(p)}
         ${p.graveyard.size > 0 ? this.renderCardRow(`graveyard (${p.graveyard.size})`, p.graveyard.cards) : ''}
         <div class="zone-counts">
@@ -83,6 +93,23 @@ export class BattleView {
   renderZone(player, zoneName) {
     const zone = player[zoneName];
     return this.renderCardRow(`${zoneName} (${zone.size})`, zone.cards);
+  }
+
+  // Hand renders as card backs for the opponent when the hide toggle is on.
+  // Player 0 is always the human; player 1 is the AI/opponent.
+  renderHand(player) {
+    const cards = player.hand.cards;
+    const hide = this.hideOpponentHand && player === this.match.players[1];
+    if (!hide) return this.renderCardRow(`hand (${cards.length})`, cards);
+    const backs = cards.map(c =>
+      `<div class="card card-back" data-iid="${c.iid}"></div>`
+    ).join('');
+    return `
+      <div class="zone">
+        <div class="zone-label">hand (${cards.length})</div>
+        <div class="cards-row">${backs}</div>
+      </div>
+    `;
   }
 
   renderBattlefield(player) {
@@ -315,6 +342,8 @@ export class BattleView {
   attachHandlers() {
     this.root.querySelectorAll('.card').forEach(el => {
       el.onclick = () => this.onCardClick(parseInt(el.dataset.iid, 10));
+      // Don't surface card info on hidden cards (would leak opponent's hand).
+      if (el.classList.contains('card-back')) return;
       el.onmouseenter = () => {
         const found = this.findCard(parseInt(el.dataset.iid, 10));
         if (found) this.tooltip.scheduleShow(el, found.card);
@@ -327,6 +356,13 @@ export class BattleView {
     this.root.querySelectorAll('button[data-act]').forEach(el => {
       el.onclick = () => this.onButton(el.dataset.act);
     });
+    const hideToggle = this.root.querySelector('[data-act="toggle-hide-opp-hand"]');
+    if (hideToggle) {
+      hideToggle.onchange = () => {
+        this.hideOpponentHand = hideToggle.checked;
+        this.render();
+      };
+    }
   }
 
 
