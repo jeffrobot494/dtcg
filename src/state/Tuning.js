@@ -11,17 +11,15 @@ export const DEFAULTS = Object.freeze({
   },
   rewards: {
     lootRemainingDeck: true,
-    ashroad:            { gold: 10 },
-    emberhide:          { gold: 10 },
-    black_rival:        { gold: 15 },
-    hollow_acolyte:     { gold: 10 },
-    veiled_hierophant:  { gold: 10 },
-    wandering_heretic:  { gold: 10 },
-    boss:               { gold: 0 },
   },
-  boss: {
-    startingLife: 50,
-    startingBattlefield: ['mountain', 'mountain', 'mountain'],
+  opponents: {
+    ashroad:            { gold: 10, startingLife: 20 },
+    emberhide:          { gold: 10, startingLife: 20 },
+    black_rival:        { gold: 15, startingLife: 20 },
+    hollow_acolyte:     { gold: 10, startingLife: 20 },
+    veiled_hierophant:  { gold: 10, startingLife: 20 },
+    wandering_heretic:  { gold: 10, startingLife: 20 },
+    boss:               { gold: 0,  startingLife: 50, startingBattlefield: ['mountain', 'mountain', 'mountain'] },
   },
   merchant: {
     offerCount: 5,

@@ -564,6 +564,25 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border-radius: 2px;
   font-size: 0.9em;
 }
+.tuning-table {
+  border-collapse: collapse;
+  margin: 4px 0;
+}
+.tuning-table th, .tuning-table td {
+  padding: 4px 12px 4px 0;
+  text-align: left;
+  color: #ddd;
+  font-weight: normal;
+}
+.tuning-table th { color: #888; font-size: 0.85em; }
+.tuning-table .opp-name { color: #fc8; font-family: monospace; }
+.tuning-table input {
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #555;
+  padding: 3px 5px;
+  border-radius: 3px;
+}
 
 /* MapScene */
 .map-scene {

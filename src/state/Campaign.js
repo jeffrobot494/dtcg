@@ -115,7 +115,7 @@ export const Campaign = {
       if (tuning.rewards?.lootRemainingDeck) {
         state.collection.push(...(opponentRemainingCards ?? []));
       }
-      const goldReward = tuning.rewards?.[nodeId]?.gold ?? 0;
+      const goldReward = tuning.opponents?.[nodeId]?.gold ?? 0;
       state.gold += goldReward;
       if (nodeId === 'boss') {
         state.status = 'victorious';

@@ -87,13 +87,13 @@ export class BattleScene {
 
     const playerDeck = { name: 'Active Deck', cards: flatToCounts(c.activeDeck) };
 
-    // Opponent options. Boss gets custom life + starting battlefield from Tuning.
+    // Opponent options from Tuning: per-sorceror starting life (+ boss adds
+    // a pre-placed starting battlefield).
     const tuning = Tuning.all();
+    const opp = tuning.opponents?.[this.nodeId] ?? {};
     const opponentOpts = {};
-    if (this.nodeId === 'boss') {
-      opponentOpts.startingLife = tuning.boss?.startingLife ?? 20;
-      opponentOpts.startingBattlefield = tuning.boss?.startingBattlefield ?? [];
-    }
+    if (opp.startingLife != null) opponentOpts.startingLife = opp.startingLife;
+    if (opp.startingBattlefield?.length) opponentOpts.startingBattlefield = opp.startingBattlefield;
 
     const p1 = new MatchPlayer('You', playerDeck, new HumanAgent(), { startingLife: c.life });
     const p2 = new MatchPlayer(this._opponentName(this.nodeId), opponentDeck, new BasicAI(), opponentOpts);

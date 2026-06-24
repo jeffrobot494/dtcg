@@ -37,22 +37,19 @@ export class TuningScene {
           </div>
         `)}
 
-        ${this._section('Sorceror rewards', `
-          ${this._numberRow('rewards.ashroad.gold',     'Ashroad gold reward',     t.rewards.ashroad.gold)}
-          ${this._numberRow('rewards.emberhide.gold',   'Emberhide gold reward',   t.rewards.emberhide.gold)}
-          ${this._numberRow('rewards.black_rival.gold', 'Black Rival gold reward', t.rewards.black_rival.gold)}
-          ${this._numberRow('rewards.boss.gold',        'Boss gold reward',        t.rewards.boss.gold)}
-          ${this._checkboxRow('rewards.lootRemainingDeck',
-            'Loot opponent\'s remaining deck on win', t.rewards.lootRemainingDeck)}
-        `)}
+        ${this._section('Sorcerors', this._renderOpponentsTable(t.opponents ?? {}))}
 
-        ${this._section('Boss', `
-          ${this._numberRow('boss.startingLife', 'Boss starting life', t.boss.startingLife)}
+        ${this._section('Boss extras', `
           <div class="tuning-row">
             <label>Boss starting battlefield:</label>
-            <input type="text" data-path="boss.startingBattlefield" value="${esc((t.boss.startingBattlefield ?? []).join(', '))}" style="width: 30em;">
+            <input type="text" data-path="opponents.boss.startingBattlefield" value="${esc((t.opponents?.boss?.startingBattlefield ?? []).join(', '))}" style="width: 30em;">
             <small>Comma-separated card ids (e.g. <code>mountain, mountain, mountain</code>).</small>
           </div>
+        `)}
+
+        ${this._section('Global', `
+          ${this._checkboxRow('rewards.lootRemainingDeck',
+            'Loot opponent\'s remaining deck on win', t.rewards?.lootRemainingDeck !== false)}
         `)}
 
         ${this._section('Rules', `
@@ -92,6 +89,26 @@ export class TuningScene {
     `;
 
     this._attachHandlers();
+  }
+
+  // Compact table of per-opponent knobs (starting life + gold reward) so all
+  // sorcerors + the boss are tunable in one place.
+  _renderOpponentsTable(opps) {
+    const rows = Object.entries(opps).map(([id, cfg]) => `
+      <tr>
+        <td class="opp-name">${esc(id)}</td>
+        <td><input type="number" step="1" data-path="opponents.${id}.startingLife" value="${cfg.startingLife ?? 20}" style="width:5em;"></td>
+        <td><input type="number" step="1" data-path="opponents.${id}.gold"         value="${cfg.gold ?? 0}"          style="width:5em;"></td>
+      </tr>
+    `).join('');
+    return `
+      <table class="tuning-table">
+        <thead>
+          <tr><th>Node</th><th>Starting life</th><th>Gold reward</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
   }
 
   _section(title, body) {
@@ -145,11 +162,11 @@ export class TuningScene {
     });
 
     // Boss startingBattlefield is a comma-separated string.
-    const bf = this.root.querySelector('input[data-path="boss.startingBattlefield"]');
+    const bf = this.root.querySelector('input[data-path="opponents.boss.startingBattlefield"]');
     if (bf) {
       bf.onblur = () => {
         const ids = bf.value.split(',').map(s => s.trim()).filter(Boolean);
-        Tuning.set('boss.startingBattlefield', ids);
+        Tuning.set('opponents.boss.startingBattlefield', ids);
       };
     }
 
