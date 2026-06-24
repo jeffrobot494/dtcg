@@ -1,4 +1,4 @@
-import { DeckLibrary } from '../state/DeckLibrary.js';
+import { DeckLibrary, DECK_TAGS } from '../state/DeckLibrary.js';
 import database from '../cards/data/index.js';
 import { formatCost, manaValue } from '../engine/Cost.js';
 import { CardTooltip } from '../ui/CardTooltip.js';
@@ -163,10 +163,11 @@ export class DeckEditorScene {
       const mark = (sel && this._hasUnsavedChanges()) ? ' *' : '';
       const pTag = d.id === activeId ? '<span class="tag tag-p">P</span>' : '';
       const oTag = d.id === oppId ? '<span class="tag tag-o">O</span>' : '';
+      const roleTag = d.tag ? `<span class="tag tag-role">${esc(d.tag)}</span>` : '';
       return `
         <div class="deck-list-item ${sel ? 'selected' : ''}" data-deck-id="${d.id}">
           <span class="deck-name">${esc(d.name)}${mark}</span>
-          <span class="deck-tags">${pTag}${oTag}</span>
+          <span class="deck-tags">${roleTag}${pTag}${oTag}</span>
         </div>
       `;
     }).join('');
@@ -180,10 +181,23 @@ export class DeckEditorScene {
     const total = wc.cards.reduce((s, [, n]) => s + n, 0);
     const countsById = new Map(wc.cards);
 
+    const currentTag = DeckLibrary.get(this.selectedId)?.tag ?? null;
+    const tagOptions = ['<option value="">(none)</option>']
+      .concat(DECK_TAGS.map(t =>
+        `<option value="${t}" ${t === currentTag ? 'selected' : ''}>${t}</option>`
+      ))
+      .join('');
+
     return `
       <div class="edit-header">
         <div class="edit-row">
           <label>Name: <input type="text" class="deck-name-input" data-act="rename" value="${esc(wc.name)}"></label>
+        </div>
+        <div class="edit-row">
+          <label>Role tag:
+            <select data-act="set-tag">${tagOptions}</select>
+          </label>
+          <small class="hint-inline">Used by the campaign to route this deck to a node.</small>
         </div>
         <div class="edit-row">
           <label><input type="checkbox" data-act="toggle-active" ${isActive ? 'checked' : ''}> Use as my deck</label>
@@ -316,6 +330,14 @@ export class DeckEditorScene {
     if (oppBox) {
       oppBox.onchange = () => {
         DeckLibrary.setOpponentId(oppBox.checked ? this.selectedId : null);
+        this.render();
+      };
+    }
+
+    const tagSelect = get('set-tag');
+    if (tagSelect) {
+      tagSelect.onchange = () => {
+        DeckLibrary.setTag(this.selectedId, tagSelect.value || null);
         this.render();
       };
     }

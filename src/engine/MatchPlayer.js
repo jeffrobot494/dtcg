@@ -3,9 +3,13 @@ import { DeckLoader } from '../decks/DeckLoader.js';
 import { emptyPool } from './Cost.js';
 
 export class MatchPlayer {
-  constructor(name, deckDef, agent) {
+  // options: { startingLife?: number, startingBattlefield?: string[] }
+  // startingBattlefield is a list of card ids placed directly on the
+  // battlefield at match start (e.g., boss starts with 3 Mountains).
+  constructor(name, deckDef, agent, options = {}) {
     this.name = name;
-    this.life = 20;
+    this.life = options.startingLife ?? 20;
+    this.startingBattlefield = options.startingBattlefield ?? [];
     this.agent = agent;
     this.manaPool = emptyPool();
     this.landPlayedThisTurn = false;

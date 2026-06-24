@@ -6,6 +6,8 @@ import { matchesCondition, scopeForEvent } from './Triggers.js';
 import { matchesReplacement, applyReplacement } from './Replacements.js';
 import { runCombatPhase } from './Combat.js';
 import { canPayCost, payCost, maxXFromPool, formatCost, formatPool, emptyPool } from './Cost.js';
+import { Card } from '../cards/Card.js';
+import database from '../cards/data/index.js';
 
 export class Match {
   constructor(players) {
@@ -45,6 +47,12 @@ export class Match {
   async start() {
     for (const p of this.players) {
       for (let i = 0; i < 7; i++) this._drawSilent(p);
+    }
+    // Place any pre-configured starting battlefield cards (e.g., boss starts
+    // with 3 Mountains in play). Cards are constructed fresh from the database
+    // rather than drawn from library.
+    for (const p of this.players) {
+      this._placeStartingBattlefield(p);
     }
     this.notify('Game start.');
 
@@ -791,5 +799,21 @@ export class Match {
   _drawSilent(player) {
     const card = player.library.drawTop();
     if (card) player.hand.add(card);
+  }
+
+  // Instantiates the cards named in player.startingBattlefield and adds them
+  // to the battlefield zone. Lands enter untapped. Creatures enter without
+  // summoning sickness (interpreted as having already been there).
+  _placeStartingBattlefield(player) {
+    const ids = player.startingBattlefield ?? [];
+    for (const cardId of ids) {
+      const def = database[cardId];
+      if (!def) {
+        this.notify(`(skipping unknown starting card: ${cardId})`);
+        continue;
+      }
+      const card = new Card(def, player);
+      player.battlefield.add(card);
+    }
   }
 }
