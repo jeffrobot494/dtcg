@@ -1,4 +1,5 @@
-import { DeckLibrary, DECK_TAGS } from '../state/DeckLibrary.js';
+import { DeckLibrary, RESERVED_DECK_TAG_PLAYER } from '../state/DeckLibrary.js';
+import { Tuning } from '../state/Tuning.js';
 import { Campaign } from '../state/Campaign.js';
 import database from '../cards/data/index.js';
 import { formatCost, manaValue } from '../engine/Cost.js';
@@ -275,8 +276,12 @@ export class DeckEditorScene {
     const isOpp = this.selectedId === oppId;
 
     const currentTag = DeckLibrary.get(this.selectedId)?.tag ?? null;
+    const availableTags = [
+      RESERVED_DECK_TAG_PLAYER,
+      ...(Tuning.all()?.nodes ?? []).map(n => n.id),
+    ];
     const tagOptions = ['<option value="">(none)</option>']
-      .concat(DECK_TAGS.map(t =>
+      .concat(availableTags.map(t =>
         `<option value="${t}" ${t === currentTag ? 'selected' : ''}>${t}</option>`
       ))
       .join('');

@@ -1,19 +1,10 @@
-import { Campaign, NODE_IDS } from '../state/Campaign.js';
+import { Campaign, getNodeIds } from '../state/Campaign.js';
 import { DeckLibrary } from '../state/DeckLibrary.js';
+import { Tuning } from '../state/Tuning.js';
 
-// Campaign hub. Lists 5 nodes (camp, merchant, 3 sorcerors, boss) with status
-// and cleared markers. Click a battle node to enter BattleScene with a config.
-// If no campaign is active, prompts to start one.
-
-const NODE_LABELS = {
-  ashroad:            { name: 'Ashroad Pyromancer',    flavor: 'Red Burn' },
-  emberhide:          { name: 'Emberhide Beastmaster', flavor: 'Red Creatures' },
-  black_rival:        { name: 'Black Rival',           flavor: 'Black Mirror' },
-  hollow_acolyte:     { name: 'Hollow Acolyte',        flavor: '' },
-  veiled_hierophant:  { name: 'Veiled Hierophant',     flavor: '' },
-  wandering_heretic:  { name: 'Wandering Heretic',     flavor: '' },
-  boss:               { name: 'Red Council',           flavor: '50 life, 3 Mountains in play' },
-};
+// Campaign hub. Lists the nodes from Tuning (camp + merchant + each tuning
+// node) with status and cleared markers. Click a battle node to enter
+// BattleScene with a config. If no campaign is active, prompts to start one.
 
 export class MapScene {
   constructor(root, manager) {
@@ -74,15 +65,13 @@ export class MapScene {
           ${this._renderMerchantNode()}
 
           <div class="map-node-group">— Sorcerors —</div>
-          ${this._renderBattleNode('ashroad', c, terminal)}
-          ${this._renderBattleNode('emberhide', c, terminal)}
-          ${this._renderBattleNode('black_rival', c, terminal)}
-          ${this._renderBattleNode('hollow_acolyte', c, terminal)}
-          ${this._renderBattleNode('veiled_hierophant', c, terminal)}
-          ${this._renderBattleNode('wandering_heretic', c, terminal)}
+          ${(Tuning.all()?.nodes ?? []).filter(n => !n.isBoss)
+            .map(n => this._renderBattleNode(n, c, terminal)).join('')}
 
-          <div class="map-node-group">— Final —</div>
-          ${this._renderBattleNode('boss', c, terminal)}
+          ${(Tuning.all()?.nodes ?? []).some(n => n.isBoss)
+            ? '<div class="map-node-group">— Final —</div>' : ''}
+          ${(Tuning.all()?.nodes ?? []).filter(n => n.isBoss)
+            .map(n => this._renderBattleNode(n, c, terminal)).join('')}
         </div>
       </div>
     `;
@@ -113,8 +102,8 @@ export class MapScene {
     `;
   }
 
-  _renderBattleNode(nodeId, c, terminal) {
-    const meta = NODE_LABELS[nodeId];
+  _renderBattleNode(node, c, terminal) {
+    const nodeId = node.id;
     const cleared = !!c.cleared[nodeId];
     const tagged = DeckLibrary.getByTag(nodeId);
     const playerHasDeck = c.activeDeck.length > 0;
@@ -135,8 +124,8 @@ export class MapScene {
     return `
       <div class="map-node">
         <div class="map-node-label">
-          <strong>${meta.name}</strong>
-          <span class="map-node-flavor">${meta.flavor}</span>
+          <strong>${node.label || nodeId}</strong>
+          <span class="map-node-flavor">${node.flavor ?? ''}</span>
         </div>
         ${actionHtml}
       </div>
@@ -162,7 +151,7 @@ export class MapScene {
     const enterMerchant = this.root.querySelector('[data-act="enter-merchant"]');
     if (enterMerchant) enterMerchant.onclick = () => this.manager.switchTo('merchant');
 
-    for (const nodeId of NODE_IDS) {
+    for (const nodeId of getNodeIds()) {
       const btn = this.root.querySelector(`[data-act="fight-${nodeId}"]`);
       if (btn) {
         btn.onclick = () => this.manager.switchTo('battle', { nodeId });

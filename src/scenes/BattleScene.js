@@ -101,16 +101,8 @@ export class BattleScene {
   }
 
   _opponentName(nodeId) {
-    switch (nodeId) {
-      case 'ashroad':            return 'Ashroad Pyromancer';
-      case 'emberhide':          return 'Emberhide Beastmaster';
-      case 'black_rival':        return 'Black Rival';
-      case 'hollow_acolyte':     return 'Hollow Acolyte';
-      case 'veiled_hierophant':  return 'Veiled Hierophant';
-      case 'wandering_heretic':  return 'Wandering Heretic';
-      case 'boss':               return 'Red Council';
-    }
-    return 'Opponent';
+    const node = Tuning.all()?.nodes?.find(n => n.id === nodeId);
+    return node?.label || 'Opponent';
   }
 
   _renderError(msg) {

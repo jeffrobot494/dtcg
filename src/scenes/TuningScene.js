@@ -37,15 +37,12 @@ export class TuningScene {
           </div>
         `)}
 
-        ${this._section('Sorcerors', this._renderOpponentsTable(t.opponents ?? {}))}
+        ${this._section('Nodes', this._renderNodesSection(t.nodes ?? []))}
 
-        ${this._section('Boss extras', `
-          <div class="tuning-row">
-            <label>Boss starting battlefield:</label>
-            <input type="text" data-path="opponents.boss.startingBattlefield" value="${esc((t.opponents?.boss?.startingBattlefield ?? []).join(', '))}" style="width: 30em;">
-            <small>Comma-separated card ids (e.g. <code>mountain, mountain, mountain</code>).</small>
-          </div>
-        `)}
+        ${this._section('Sorcerors',
+          this._renderOpponentsTable(t.opponents ?? {})
+          + `<small class="hint-inline">Starting battlefield is a comma-separated list of card ids (e.g. <code>mountain, mountain, mountain</code>). Leave empty for none.</small>`
+        )}
 
         ${this._section('Global', `
           ${this._checkboxRow('rewards.lootRemainingDeck',
@@ -91,20 +88,50 @@ export class TuningScene {
     this._attachHandlers();
   }
 
-  // Compact table of per-opponent knobs (starting life + gold reward) so all
-  // sorcerors + the boss are tunable in one place.
+  // Nodes section: add/remove campaign nodes. The id is immutable after
+  // creation; label/flavor/isBoss are editable inline.
+  _renderNodesSection(nodes) {
+    const rows = nodes.map(n => `
+      <tr data-node-id="${esc(n.id)}">
+        <td class="opp-name">${esc(n.id)}</td>
+        <td><input type="text" data-node-field="label"  value="${esc(n.label  ?? '')}" style="width:14em;"></td>
+        <td><input type="text" data-node-field="flavor" value="${esc(n.flavor ?? '')}" style="width:18em;"></td>
+        <td style="text-align:center;"><input type="checkbox" data-node-field="isBoss" ${n.isBoss ? 'checked' : ''}></td>
+        <td><button data-act="remove-node">Delete</button></td>
+      </tr>
+    `).join('');
+    return `
+      <table class="tuning-table">
+        <thead>
+          <tr><th>Id</th><th>Label</th><th>Flavor</th><th>Boss?</th><th></th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="tuning-row" style="margin-top:8px;">
+        <label>New node id:</label>
+        <input type="text" data-act="new-node-id" placeholder="e.g. ember_witch" style="width:12em;">
+        <input type="text" data-act="new-node-label" placeholder="Label" style="width:14em;">
+        <button data-act="add-node">+ Add node</button>
+        <small>Id: lowercase letters / digits / underscores. Adding a node creates a matching opponents entry and tag slot.</small>
+      </div>
+    `;
+  }
+
+  // Compact table of per-opponent knobs (starting life, gold reward, and the
+  // pre-placed starting battlefield) so every node is tunable in one place.
   _renderOpponentsTable(opps) {
     const rows = Object.entries(opps).map(([id, cfg]) => `
       <tr>
         <td class="opp-name">${esc(id)}</td>
         <td><input type="number" step="1" data-path="opponents.${id}.startingLife" value="${cfg.startingLife ?? 20}" style="width:5em;"></td>
         <td><input type="number" step="1" data-path="opponents.${id}.gold"         value="${cfg.gold ?? 0}"          style="width:5em;"></td>
+        <td><input type="text" data-path="opponents.${id}.startingBattlefield" data-list-input="1" value="${esc((cfg.startingBattlefield ?? []).join(', '))}" style="width:28em;"></td>
       </tr>
     `).join('');
     return `
       <table class="tuning-table">
         <thead>
-          <tr><th>Node</th><th>Starting life</th><th>Gold reward</th></tr>
+          <tr><th>Node</th><th>Starting life</th><th>Gold reward</th><th>Starting battlefield</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -161,12 +188,52 @@ export class TuningScene {
       el.onchange = () => Tuning.set(el.dataset.path, el.value);
     });
 
-    // Boss startingBattlefield is a comma-separated string.
-    const bf = this.root.querySelector('input[data-path="opponents.boss.startingBattlefield"]');
-    if (bf) {
-      bf.onblur = () => {
-        const ids = bf.value.split(',').map(s => s.trim()).filter(Boolean);
-        Tuning.set('opponents.boss.startingBattlefield', ids);
+    // Starting battlefields are comma-separated lists. Per-opponent inputs
+    // are marked with data-list-input so the generic number handler skips them.
+    this.root.querySelectorAll('input[data-list-input="1"][data-path]').forEach(el => {
+      el.onblur = () => {
+        const ids = el.value.split(',').map(s => s.trim()).filter(Boolean);
+        Tuning.set(el.dataset.path, ids);
+      };
+    });
+
+    // Nodes: per-row label / flavor / isBoss edits.
+    this.root.querySelectorAll('tr[data-node-id] input[data-node-field]').forEach(el => {
+      const id = el.closest('tr').dataset.nodeId;
+      const field = el.dataset.nodeField;
+      const apply = () => {
+        if (field === 'isBoss') Tuning.updateNode(id, { isBoss: el.checked });
+        else Tuning.updateNode(id, { [field]: el.value });
+      };
+      if (el.type === 'checkbox') el.onchange = apply;
+      else el.onblur = apply;
+    });
+
+    // Nodes: delete buttons.
+    this.root.querySelectorAll('tr[data-node-id] [data-act="remove-node"]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.closest('tr').dataset.nodeId;
+        if (!confirm(`Delete node "${id}"? Any deck tagged with it will be untagged.`)) return;
+        Tuning.removeNode(id);
+        DeckLibrary.clearTag(id);
+        this.render();
+      };
+    });
+
+    // Nodes: add new.
+    const addBtn = this.root.querySelector('[data-act="add-node"]');
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const idEl    = this.root.querySelector('[data-act="new-node-id"]');
+        const labelEl = this.root.querySelector('[data-act="new-node-label"]');
+        const id = idEl?.value.trim();
+        const label = labelEl?.value.trim() || id;
+        if (!id) { alert('Id is required.'); return; }
+        if (!Tuning.addNode({ id, label })) {
+          alert('Could not add node — id must be snake_case and unique.');
+          return;
+        }
+        this.render();
       };
     }
 

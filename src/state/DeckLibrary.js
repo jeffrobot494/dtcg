@@ -5,21 +5,15 @@ import { loadDeck } from '../decks/parser.js';
 // Persists to localStorage. Decks stored as { id, name, cards: [[id, count]], tag }.
 //
 // Tags are used by the campaign layer to route decks into roles:
-//   player_starting / ashroad / emberhide / black_rival / boss
+//   player_starting (reserved) + each node id from Tuning.nodes.
 // Each tag is unique — assigning a tag transfers it from any previous holder.
+// The set of valid tags is dynamic (the user can add/remove nodes), so we
+// don't enforce a fixed whitelist here. Callers build the dropdown options
+// from Tuning + the reserved tag.
 
 const STORAGE_KEY = 'dtcg.deckLibrary';
 
-export const DECK_TAGS = [
-  'player_starting',
-  'ashroad',
-  'emberhide',
-  'black_rival',
-  'hollow_acolyte',
-  'veiled_hierophant',
-  'wandering_heretic',
-  'boss',
-];
+export const RESERVED_DECK_TAG_PLAYER = 'player_starting';
 
 let state = null;
 
@@ -104,7 +98,6 @@ export const DeckLibrary = {
   setTag(id, tag) {
     if (!state.decks[id]) return;
     const normalized = tag || null;
-    if (normalized && !DECK_TAGS.includes(normalized)) return;
     if (normalized) {
       for (const d of Object.values(state.decks)) {
         if (d.id !== id && d.tag === normalized) d.tag = null;
@@ -112,6 +105,17 @@ export const DeckLibrary = {
     }
     state.decks[id].tag = normalized;
     save();
+  },
+
+  // Remove a tag from every deck that has it. Used when a node is deleted
+  // from Tuning so orphaned tags don't linger on the library.
+  clearTag(tag) {
+    if (!tag) return;
+    let changed = false;
+    for (const d of Object.values(state.decks)) {
+      if (d.tag === tag) { d.tag = null; changed = true; }
+    }
+    if (changed) save();
   },
 
   getActiveId()    { return state.activeId; },

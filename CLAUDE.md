@@ -403,3 +403,225 @@ User-facing project facts live in memory under
 
 This `CLAUDE.md` covers the **code-side** picture. The two together cover
 ~90% of context needed to be productive immediately.
+
+---
+
+## Campaign layer (added after the PDF cards landed)
+
+A meta layer was built on top of the battle engine to test the "Black Mage
+Expedition" vertical-slice alpha. The full design lives in
+`vertical_slice_design.md` §17. The shipped code:
+
+### Singleton state stores
+
+- **`src/state/DeckLibrary.js`** — decks tagged with role-tags (`player_starting`,
+  per-node ids, `boss`). `DECK_TAGS` is the reserved list. `getByTag(tag)` and
+  `setTag(id, tag)` enforce one-deck-per-tag.
+- **`src/state/Tuning.js`** — game-wide knobs. `DEFAULTS` holds the schema.
+  `deepMerge` on load backfills new fields onto stale saves. Persisted at
+  `dtcg.tuning.v1`. Per-opponent block: `opponents.<id>` with `gold`,
+  `startingLife`, `startingBattlefield`.
+- **`src/state/Campaign.js`** — current-run state. `dtcg.campaign.v1`.
+  `collection` and `activeDeck` are flat card-id lists (duplicates allowed).
+  `applyBattleResult` handles graveyard attrition + looting + gold +
+  cleared-marker + merchant refresh. `NODE_IDS` enumerates campaign nodes.
+
+### Scenes
+
+Top-level (nav bar): **Map**, **Battle** (sandbox), **Decks**, **Tuning**.
+Sub-scenes (off-nav, reached via in-game navigation): **Camp**, **Merchant**,
+**GameOver**.
+
+`SceneManager.switchTo(id, context)` accepts a context object. Scenes can
+implement `canLeave()` to block navigation (BattleScene confirms mid-battle).
+`registerHidden(id, factory)` is the helper for off-nav scenes.
+
+**DeckEditorScene** has two modes via `context.mode`:
+- `library` (default) — full database pool, deck list visible, tags editable.
+- `collection` — pool restricted to `Campaign.collection` minus active deck.
+
+### Engine extensions for the campaign
+
+- `MatchPlayer(name, deckDef, agent, { startingLife, startingBattlefield })`.
+- `Match` auto-taps lands inside `_actionCast` / `_actionCastFromGraveyard` /
+  `_actionActivate` — agents emit cast/activate without pre-tapping. Methods:
+  `_potentialPool`, `_autoTapForCost`, `_doTap`. Affordability gates
+  (`_canCast`, `canActivate`, etc.) check against potential pool.
+- `Match.canExecute(player, action)` is the public predicate AI/UI use to
+  filter actions.
+
+### AI changes worth knowing
+
+- `BasicAI._mainPhaseAction` step 3 emits actions directly; no tap-then-cast
+  loop on the AI side anymore (engine handles tapping).
+- `chooseXValue` uses `_smartDamageX` to predict the eventual target and pick
+  exact-lethal X (so Blaze X=1 on a 1/1 doesn't tap 6 Mountains).
+- `_pickTarget` filters candidates through `isUsefulTarget` upfront — single
+  source of truth for "is this target useful?" shared with `hasUsefulTarget`.
+
+---
+
+## Crafting system spec (next session)
+
+Approved design from a planning conversation. **All four open decisions are
+locked**:
+
+1. **Lands included** in craftable types (so anything non-creature).
+2. **Per-opponent component rewards** live as three more inputs in the
+   Sorcerors table on TuningScene.
+3. **Order**: dynamic nodes first (this session, in progress), then crafting
+   (next session, fresh context).
+4. **Default recipe**: every craftable card defaults to **3× leg_of_toad**.
+
+### Data shapes
+
+**`Campaign.js`** state gains:
+
+```js
+everOwnedCardIds: [],   // array of unique card ids (Set semantics).
+                        // Every card that has ever entered the collection.
+                        // Never removed (graveyard attrition / selling don't
+                        // clear it). Source of "what can I craft?".
+components: { leg_of_toad: 0, eye_of_newt: 0, unicorn_hair: 0 },
+```
+
+Update `everOwnedCardIds` on every collection-add path:
+- `newRun()` from the seed deck.
+- `applyBattleResult` when looting opponent's remaining cards.
+- `buyCard` from merchant.
+- `craftCard` (new).
+
+**`Tuning.js`** `DEFAULTS` gains:
+
+```js
+recipes: {
+  // Auto-populated from the database at init time for any non-creature card,
+  // defaulting to { leg_of_toad: 3, eye_of_newt: 0, unicorn_hair: 0 }.
+  // User edits per-card on the Recipes tab.
+  boil:              { leg_of_toad: 3, eye_of_newt: 0, unicorn_hair: 0 },
+  rockslide:         { leg_of_toad: 3, eye_of_newt: 0, unicorn_hair: 0 },
+  ...
+},
+```
+
+And the `opponents.<id>` entries gain:
+```js
+components: { leg_of_toad: 0, eye_of_newt: 0, unicorn_hair: 0 },
+```
+
+### Component canonical ids
+
+Use snake_case ids for storage / data-path consistency:
+- `leg_of_toad` (common)
+- `eye_of_newt` (uncommon)
+- `unicorn_hair` (rare)
+
+UI labels are "Leg of Toad", "Eye of Newt", "Unicorn Hair".
+
+### `Campaign` methods to add
+
+```js
+craftCard(cardId)
+// Validates: recipe exists, components affordable, card is in
+// everOwnedCardIds, card is non-creature.
+// Deducts components, pushes cardId to collection + everOwnedCardIds.
+```
+
+Inside `applyBattleResult`, after the win branch:
+```js
+const compReward = tuning.opponents?.[nodeId]?.components ?? {};
+for (const [comp, n] of Object.entries(compReward)) {
+  state.components[comp] = (state.components[comp] ?? 0) + n;
+}
+```
+
+And in `newRun`, populate `everOwnedCardIds` from the starter deck:
+```js
+state.everOwnedCardIds = [...new Set(cardIds)];
+state.components = { leg_of_toad: 0, eye_of_newt: 0, unicorn_hair: 0 };
+```
+
+### New scenes
+
+1. **`src/scenes/RecipesScene.js`** — new top-level nav tab "Recipes".
+   - Lists every **non-creature** card from `src/cards/data/index.js`
+     (lands included per decision #1).
+   - One row per card: name + three small number inputs (leg, eye, hair).
+   - Live total per row; rows where total ≠ 3 highlighted (warn-only).
+   - Saves to `Tuning.recipes.<cardId>.<componentId>` on input blur.
+   - Register in `main.js` next to Tuning.
+
+2. **`src/scenes/CraftingScene.js`** — sub-scene reached from Camp.
+   - Header: current `Campaign.components` totals.
+   - Lists every card in `Campaign.everOwnedCardIds` that is **non-creature**
+     AND has a valid recipe in Tuning.
+   - Each row shows the recipe, current affordability (red/green), and a
+     `[Craft]` button (disabled if any component is short).
+   - Click `[Craft]` → `Campaign.craftCard(cardId)` → re-render.
+   - Register hidden in `main.js`.
+
+3. **`CampScene`** — add a new `[Craft]` button between "View collection"
+   and "Start new run". Click → `manager.switchTo('crafting')`.
+
+### TuningScene changes
+
+In `_renderOpponentsTable`, add three more `<td>` cells per row for the
+component rewards. Width budget for the row gets tight — consider stacking
+component inputs into one cell as a small inline group (`[3] [0] [0]` with
+tooltips), or splitting the section in two: life/gold/battlefield in one
+table, component rewards in a separate compact table below.
+
+Recommend the second approach: keep the existing Sorcerors table as-is, add
+a new "Component rewards" sub-table below it with three columns (leg, eye,
+hair) per node.
+
+### Recipes table seeding
+
+On `Tuning.initTuning`, after loading and deep-merging defaults:
+```js
+// Auto-seed missing recipe entries for any non-creature card in the database.
+import database from '../cards/data/index.js';
+for (const def of Object.values(database)) {
+  if (def.type === 'creature') continue;
+  if (def.isToken) continue;
+  if (!state.recipes[def.id]) {
+    state.recipes[def.id] = { leg_of_toad: 3, eye_of_newt: 0, unicorn_hair: 0 };
+  }
+}
+```
+
+That way the Recipes scene always has a row for every non-creature card,
+and adding new cards to the database auto-creates a default recipe.
+
+### Validation rules
+
+- Recipes scene: warn (red text) when total ≠ 3, but don't block save. User
+  can experiment with non-3 totals.
+- Crafting scene: only allow craft when `Campaign.components.<comp> >=
+  recipe.<comp>` for all three.
+- A recipe with total 0 is treated as "not craftable" — hidden from the
+  crafting list rather than shown as a free craft.
+
+### Nav bar after both phases land
+
+`[ Map ] [ Battle ] [ Decks ] [ Tuning ] [ Recipes ]`
+
+### Migration notes
+
+Existing saved Campaign blobs won't have `everOwnedCardIds` or `components`.
+`initCampaign` should backfill on load:
+```js
+state.everOwnedCardIds ??= [...new Set(state.collection ?? [])];
+state.components ??= { leg_of_toad: 0, eye_of_newt: 0, unicorn_hair: 0 };
+```
+
+Existing Tuning blobs gain `recipes` and per-opponent `components` via the
+existing `deepMerge` machinery.
+
+### Out of scope for the first crafting cut
+
+- Merchant doesn't sell components.
+- No drag-and-drop UI.
+- No batch craft / craft-all.
+- No alternate component substitution.
+- No recipe presets / templates.

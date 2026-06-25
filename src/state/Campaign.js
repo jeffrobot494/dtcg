@@ -13,15 +13,17 @@ import { manaValue } from '../engine/Cost.js';
 
 const STORAGE_KEY = 'dtcg.campaign.v1';
 
-export const NODE_IDS = [
-  'ashroad',
-  'emberhide',
-  'black_rival',
-  'hollow_acolyte',
-  'veiled_hierophant',
-  'wandering_heretic',
-  'boss',
-];
+// Read the current campaign node ids from Tuning. The list is dynamic — the
+// Tuning page lets the user add/remove nodes — so consumers must call this
+// each time rather than caching.
+export function getNodeIds() {
+  return (Tuning.all()?.nodes ?? []).map(n => n.id);
+}
+
+// True if the named node is flagged as a boss (run-ending on win).
+export function isBossNode(id) {
+  return !!(Tuning.all()?.nodes ?? []).find(n => n.id === id)?.isBoss;
+}
 
 let state = null;
 
@@ -86,7 +88,7 @@ export const Campaign = {
       gold: tuning.player.startingGold,
       collection: [...cardIds],
       activeDeck: [...cardIds],
-      cleared: Object.fromEntries(NODE_IDS.map(id => [id, false])),
+      cleared: Object.fromEntries(getNodeIds().map(id => [id, false])),
       merchantOffers: [],
       status: 'active',
       version: 1,
@@ -117,7 +119,7 @@ export const Campaign = {
       }
       const goldReward = tuning.opponents?.[nodeId]?.gold ?? 0;
       state.gold += goldReward;
-      if (nodeId === 'boss') {
+      if (isBossNode(nodeId)) {
         state.status = 'victorious';
       } else {
         this.regenerateMerchant();  // wares change on each node clear

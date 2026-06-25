@@ -4,6 +4,19 @@
 
 const STORAGE_KEY = 'dtcg.tuning.v1';
 
+// Default campaign nodes. The `nodes` array drives MapScene, DeckLibrary's
+// tag list, BattleScene's opponent label, and Campaign.cleared. The reserved
+// `player_starting` tag is added by callers — it's not a node.
+const DEFAULT_NODES = [
+  { id: 'ashroad',           label: 'Ashroad Pyromancer',    flavor: 'Red Burn',         isBoss: false },
+  { id: 'emberhide',         label: 'Emberhide Beastmaster', flavor: 'Red Creatures',    isBoss: false },
+  { id: 'black_rival',       label: 'Black Rival',           flavor: 'Black Mirror',     isBoss: false },
+  { id: 'hollow_acolyte',    label: 'Hollow Acolyte',        flavor: '',                 isBoss: false },
+  { id: 'veiled_hierophant', label: 'Veiled Hierophant',     flavor: '',                 isBoss: false },
+  { id: 'wandering_heretic', label: 'Wandering Heretic',     flavor: '',                 isBoss: false },
+  { id: 'boss',              label: 'Red Council',           flavor: '50 life, 3 Mountains in play', isBoss: true  },
+];
+
 export const DEFAULTS = Object.freeze({
   player: {
     startingLife: 20,
@@ -12,13 +25,14 @@ export const DEFAULTS = Object.freeze({
   rewards: {
     lootRemainingDeck: true,
   },
+  nodes: DEFAULT_NODES,
   opponents: {
-    ashroad:            { gold: 10, startingLife: 20 },
-    emberhide:          { gold: 10, startingLife: 20 },
-    black_rival:        { gold: 15, startingLife: 20 },
-    hollow_acolyte:     { gold: 10, startingLife: 20 },
-    veiled_hierophant:  { gold: 10, startingLife: 20 },
-    wandering_heretic:  { gold: 10, startingLife: 20 },
+    ashroad:            { gold: 10, startingLife: 20, startingBattlefield: [] },
+    emberhide:          { gold: 10, startingLife: 20, startingBattlefield: [] },
+    black_rival:        { gold: 15, startingLife: 20, startingBattlefield: [] },
+    hollow_acolyte:     { gold: 10, startingLife: 20, startingBattlefield: [] },
+    veiled_hierophant:  { gold: 10, startingLife: 20, startingBattlefield: [] },
+    wandering_heretic:  { gold: 10, startingLife: 20, startingBattlefield: [] },
     boss:               { gold: 0,  startingLife: 50, startingBattlefield: ['mountain', 'mountain', 'mountain'] },
   },
   merchant: {
@@ -118,5 +132,46 @@ export const Tuning = {
     state = parsed;
     deepMerge(state, deepClone(DEFAULTS));
     save();
+  },
+
+  // ---------- Node management ----------
+
+  // Add a new node. `id` must be unique snake_case. Auto-creates a matching
+  // opponents.<id> entry with sensible defaults. Returns true on success.
+  addNode({ id, label, flavor = '', isBoss = false }) {
+    if (!id || !/^[a-z][a-z0-9_]*$/.test(id)) return false;
+    if (state.nodes.some(n => n.id === id)) return false;
+    state.nodes.push({ id, label: label || id, flavor, isBoss: !!isBoss });
+    if (!state.opponents[id]) {
+      state.opponents[id] = {
+        gold: 0,
+        startingLife: isBoss ? 50 : 20,
+        startingBattlefield: [],
+      };
+    }
+    save();
+    return true;
+  },
+
+  // Remove a node. Drops its opponents entry. Caller is responsible for
+  // clearing any decks that were tagged with this id (DeckLibrary.clearTag).
+  removeNode(id) {
+    const idx = state.nodes.findIndex(n => n.id === id);
+    if (idx < 0) return false;
+    state.nodes.splice(idx, 1);
+    delete state.opponents[id];
+    save();
+    return true;
+  },
+
+  // Update a node field in place (label / flavor / isBoss). Id is immutable.
+  updateNode(id, patch) {
+    const node = state.nodes.find(n => n.id === id);
+    if (!node) return false;
+    if ('label'  in patch) node.label  = patch.label;
+    if ('flavor' in patch) node.flavor = patch.flavor;
+    if ('isBoss' in patch) node.isBoss = !!patch.isBoss;
+    save();
+    return true;
   },
 };
