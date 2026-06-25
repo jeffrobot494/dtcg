@@ -37,10 +37,8 @@ export class TuningScene {
           </div>
         `)}
 
-        ${this._section('Nodes', this._renderNodesSection(t.nodes ?? []))}
-
-        ${this._section('Sorcerors',
-          this._renderOpponentsTable(t.opponents ?? {})
+        ${this._section('Nodes',
+          this._renderNodesSection(t.nodes ?? [], t.opponents ?? {})
           + `<small class="hint-inline">Starting battlefield is a comma-separated list of card ids (e.g. <code>mountain, mountain, mountain</code>). Leave empty for none.</small>`
         )}
 
@@ -88,25 +86,51 @@ export class TuningScene {
     this._attachHandlers();
   }
 
-  // Nodes section: add/remove campaign nodes. The id is immutable after
-  // creation; label/flavor/isBoss are editable inline.
-  _renderNodesSection(nodes) {
-    const rows = nodes.map(n => `
-      <tr data-node-id="${esc(n.id)}">
-        <td class="opp-name">${esc(n.id)}</td>
-        <td><input type="text" data-node-field="label"  value="${esc(n.label  ?? '')}" style="width:14em;"></td>
-        <td><input type="text" data-node-field="flavor" value="${esc(n.flavor ?? '')}" style="width:18em;"></td>
-        <td style="text-align:center;"><input type="checkbox" data-node-field="isBoss" ${n.isBoss ? 'checked' : ''}></td>
-        <td><button data-act="remove-node">Delete</button></td>
-      </tr>
-    `).join('');
+  // Nodes section: add/remove campaign nodes and edit every per-node knob
+  // inline. Each node is a two-row card: row 1 is the node identity
+  // (label/flavor/boss/delete), row 2 is the opponent's per-battle stats.
+  _renderNodesSection(nodes, opps) {
+    const cards = nodes.map(n => {
+      const cfg = opps[n.id] ?? {};
+      const comp = cfg.components ?? {};
+      return `
+        <div class="node-card" data-node-id="${esc(n.id)}">
+          <div class="node-row">
+            <span class="opp-name">${esc(n.id)}</span>
+            <label>Label:
+              <input type="text" data-node-field="label" value="${esc(n.label ?? '')}" style="width:11em;">
+            </label>
+            <label>Flavor:
+              <input type="text" data-node-field="flavor" value="${esc(n.flavor ?? '')}" style="width:16em;">
+            </label>
+            <label><input type="checkbox" data-node-field="isBoss" ${n.isBoss ? 'checked' : ''}> Boss?</label>
+            <button data-act="remove-node" class="node-delete">Delete</button>
+          </div>
+          <div class="node-row">
+            <label>Life:
+              <input type="number" step="1" data-path="opponents.${n.id}.startingLife" value="${cfg.startingLife ?? 20}" style="width:4em;">
+            </label>
+            <label>Gold:
+              <input type="number" step="1" data-path="opponents.${n.id}.gold" value="${cfg.gold ?? 0}" style="width:4em;">
+            </label>
+            <label>Battlefield:
+              <input type="text" data-path="opponents.${n.id}.startingBattlefield" data-list-input="1" value="${esc((cfg.startingBattlefield ?? []).join(', '))}" style="width:22em;">
+            </label>
+            <label>Leg:
+              <input type="number" step="1" data-path="opponents.${n.id}.components.leg_of_toad" value="${comp.leg_of_toad ?? 0}" style="width:3em;">
+            </label>
+            <label>Eye:
+              <input type="number" step="1" data-path="opponents.${n.id}.components.eye_of_newt" value="${comp.eye_of_newt ?? 0}" style="width:3em;">
+            </label>
+            <label>Hair:
+              <input type="number" step="1" data-path="opponents.${n.id}.components.unicorn_hair" value="${comp.unicorn_hair ?? 0}" style="width:3em;">
+            </label>
+          </div>
+        </div>
+      `;
+    }).join('');
     return `
-      <table class="tuning-table">
-        <thead>
-          <tr><th>Id</th><th>Label</th><th>Flavor</th><th>Boss?</th><th></th></tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="node-list">${cards}</div>
       <div class="tuning-row" style="margin-top:8px;">
         <label>New node id:</label>
         <input type="text" data-act="new-node-id" placeholder="e.g. ember_witch" style="width:12em;">
@@ -114,36 +138,6 @@ export class TuningScene {
         <button data-act="add-node">+ Add node</button>
         <small>Id: lowercase letters / digits / underscores. Adding a node creates a matching opponents entry and tag slot.</small>
       </div>
-    `;
-  }
-
-  // Compact table of per-opponent knobs (starting life, gold reward, the
-  // pre-placed starting battlefield, and the per-component drop on defeat).
-  _renderOpponentsTable(opps) {
-    const rows = Object.entries(opps).map(([id, cfg]) => {
-      const comp = cfg.components ?? {};
-      return `
-      <tr>
-        <td class="opp-name">${esc(id)}</td>
-        <td><input type="number" step="1" data-path="opponents.${id}.startingLife" value="${cfg.startingLife ?? 20}" style="width:5em;"></td>
-        <td><input type="number" step="1" data-path="opponents.${id}.gold"         value="${cfg.gold ?? 0}"          style="width:5em;"></td>
-        <td><input type="text" data-path="opponents.${id}.startingBattlefield" data-list-input="1" value="${esc((cfg.startingBattlefield ?? []).join(', '))}" style="width:28em;"></td>
-        <td><input type="number" step="1" data-path="opponents.${id}.components.leg_of_toad"  value="${comp.leg_of_toad  ?? 0}" style="width:3em;"></td>
-        <td><input type="number" step="1" data-path="opponents.${id}.components.eye_of_newt"  value="${comp.eye_of_newt  ?? 0}" style="width:3em;"></td>
-        <td><input type="number" step="1" data-path="opponents.${id}.components.unicorn_hair" value="${comp.unicorn_hair ?? 0}" style="width:3em;"></td>
-      </tr>
-    `;
-    }).join('');
-    return `
-      <table class="tuning-table">
-        <thead>
-          <tr>
-            <th>Node</th><th>Starting life</th><th>Gold reward</th><th>Starting battlefield</th>
-            <th>Leg of Toad</th><th>Eye of Newt</th><th>Unicorn Hair</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
     `;
   }
 
@@ -207,8 +201,8 @@ export class TuningScene {
     });
 
     // Nodes: per-row label / flavor / isBoss edits.
-    this.root.querySelectorAll('tr[data-node-id] input[data-node-field]').forEach(el => {
-      const id = el.closest('tr').dataset.nodeId;
+    this.root.querySelectorAll('[data-node-id] input[data-node-field]').forEach(el => {
+      const id = el.closest('[data-node-id]').dataset.nodeId;
       const field = el.dataset.nodeField;
       const apply = () => {
         if (field === 'isBoss') Tuning.updateNode(id, { isBoss: el.checked });
@@ -219,9 +213,9 @@ export class TuningScene {
     });
 
     // Nodes: delete buttons.
-    this.root.querySelectorAll('tr[data-node-id] [data-act="remove-node"]').forEach(btn => {
+    this.root.querySelectorAll('[data-node-id] [data-act="remove-node"]').forEach(btn => {
       btn.onclick = () => {
-        const id = btn.closest('tr').dataset.nodeId;
+        const id = btn.closest('[data-node-id]').dataset.nodeId;
         if (!confirm(`Delete node "${id}"? Any deck tagged with it will be untagged.`)) return;
         Tuning.removeNode(id);
         DeckLibrary.clearTag(id);

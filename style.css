@@ -502,10 +502,41 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* TuningScene */
 .tuning-scene {
-  max-width: 800px;
+  max-width: 900px;
   padding: 16px;
   color: #ddd;
 }
+/* Node cards: two flex rows per node (identity / opponent stats). */
+.node-list { display: flex; flex-direction: column; gap: 8px; }
+.node-card {
+  background: #252525;
+  border: 1px solid #383838;
+  border-radius: 3px;
+  padding: 6px 10px;
+}
+.node-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 3px 0;
+}
+.node-row label { color: #ddd; display: inline-flex; align-items: center; gap: 4px; }
+.node-row .opp-name { color: #fc8; font-family: monospace; min-width: 7em; }
+.node-row input[type="number"],
+.node-row input[type="text"] {
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #555;
+  padding: 3px 5px;
+  border-radius: 3px;
+}
+.node-delete {
+  margin-left: auto;
+  background: #444; color: #ddd; border: 1px solid #555;
+  padding: 4px 10px; border-radius: 3px; cursor: pointer;
+}
+.node-delete:hover { background: #555; }
 .tuning-scene h2 {
   margin: 0 0 16px 0;
   color: #fff;
