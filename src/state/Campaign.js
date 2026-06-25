@@ -68,6 +68,24 @@ function removeFirst(arr, item) {
   if (i >= 0) arr.splice(i, 1);
 }
 
+const COMPONENT_IDS = ['leg_of_toad', 'eye_of_newt', 'unicorn_hair'];
+
+function zeroComponents() {
+  return { leg_of_toad: 0, eye_of_newt: 0, unicorn_hair: 0 };
+}
+
+// Idempotently register a card id as ever-owned. Source of truth for "what
+// can I craft?" — never decremented by attrition or selling.
+function addEverOwned(id) {
+  if (!state.everOwnedCardIds.includes(id)) state.everOwnedCardIds.push(id);
+}
+
+// Sum a recipe's component counts; 0 means "not craftable".
+function recipeTotal(recipe) {
+  if (!recipe) return 0;
+  return COMPONENT_IDS.reduce((sum, c) => sum + (recipe[c] ?? 0), 0);
+}
+
 export const Campaign = {
   hasActive() { return state !== null; },
   all() { return state; },
@@ -88,6 +106,8 @@ export const Campaign = {
       gold: tuning.player.startingGold,
       collection: [...cardIds],
       activeDeck: [...cardIds],
+      everOwnedCardIds: [...new Set(cardIds)],
+      components: zeroComponents(),
       cleared: Object.fromEntries(getNodeIds().map(id => [id, false])),
       merchantOffers: [],
       status: 'active',
@@ -115,10 +135,17 @@ export const Campaign = {
       if (state.cleared.hasOwnProperty(nodeId)) state.cleared[nodeId] = true;
       const tuning = Tuning.all();
       if (tuning.rewards?.lootRemainingDeck) {
-        state.collection.push(...(opponentRemainingCards ?? []));
+        for (const id of (opponentRemainingCards ?? [])) {
+          state.collection.push(id);
+          addEverOwned(id);
+        }
       }
       const goldReward = tuning.opponents?.[nodeId]?.gold ?? 0;
       state.gold += goldReward;
+      const compReward = tuning.opponents?.[nodeId]?.components ?? {};
+      for (const c of COMPONENT_IDS) {
+        state.components[c] = (state.components[c] ?? 0) + (compReward[c] ?? 0);
+      }
       if (isBossNode(nodeId)) {
         state.status = 'victorious';
       } else {
@@ -169,7 +196,31 @@ export const Campaign = {
     if (state.gold < offer.price) return false;
     state.gold -= offer.price;
     state.collection.push(offer.cardId);
+    addEverOwned(offer.cardId);
     state.merchantOffers.splice(offerIndex, 1);
+    save();
+    return true;
+  },
+
+  // Craft a card by spending components per the Tuning recipe. The card must
+  // be non-creature, in everOwnedCardIds, and have a recipe with total > 0
+  // whose components are all affordable. Returns true on success.
+  craftCard(cardId) {
+    if (!state) return false;
+    const def = database[cardId];
+    if (!def) return false;
+    if (def.type === 'creature') return false;
+    if (!state.everOwnedCardIds.includes(cardId)) return false;
+    const recipe = Tuning.all().recipes?.[cardId];
+    if (recipeTotal(recipe) <= 0) return false;
+    for (const c of COMPONENT_IDS) {
+      if ((state.components[c] ?? 0) < (recipe[c] ?? 0)) return false;
+    }
+    for (const c of COMPONENT_IDS) {
+      state.components[c] -= (recipe[c] ?? 0);
+    }
+    state.collection.push(cardId);
+    addEverOwned(cardId);
     save();
     return true;
   },

@@ -747,3 +747,41 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .merchant-row-action button:hover:not(:disabled) { background: #759; }
 .merchant-row-action button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* RecipesScene — reuses .tuning-table; the per-row total cell turns red
+   when total != 3 via .warn (already defined). */
+.recipe-total { text-align: center; font-weight: bold; }
+
+/* CraftingScene */
+.crafting-scene { max-width: 900px; padding: 16px; color: #ddd; }
+.crafting-scene h2 { color: #fff; margin: 0 0 12px 0; }
+.crafting-header {
+  display: flex; gap: 18px; align-items: center;
+  background: #1e1e1e; border: 1px solid #444; border-radius: 4px;
+  padding: 10px 14px; margin-bottom: 12px;
+}
+.crafting-header strong { color: #fc8; }
+.crafting-header button {
+  margin-left: auto;
+  background: #444; color: #ddd; border: 1px solid #555;
+  padding: 6px 14px; border-radius: 3px; cursor: pointer;
+}
+.crafting-header button:hover { background: #555; }
+.crafting-list { display: flex; flex-direction: column; gap: 4px; }
+.crafting-row {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #252525; border: 1px solid #383838; border-radius: 3px;
+  padding: 6px 10px;
+}
+.crafting-row-info { display: flex; flex-direction: column; gap: 1px; }
+.crafting-meta { color: #888; font-size: 0.8em; }
+.crafting-recipe { font-size: 0.85em; margin-top: 2px; }
+.crafting-recipe .comp-ok    { color: #8c6; }
+.crafting-recipe .comp-short { color: #f88; }
+.crafting-row-action button {
+  background: #648; color: #fff; border: none;
+  padding: 4px 10px; border-radius: 3px; cursor: pointer;
+  font-size: 0.85em;
+}
+.crafting-row-action button:hover:not(:disabled) { background: #759; }
+.crafting-row-action button:disabled { opacity: 0.4; cursor: not-allowed; }

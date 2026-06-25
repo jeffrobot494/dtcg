@@ -117,21 +117,30 @@ export class TuningScene {
     `;
   }
 
-  // Compact table of per-opponent knobs (starting life, gold reward, and the
-  // pre-placed starting battlefield) so every node is tunable in one place.
+  // Compact table of per-opponent knobs (starting life, gold reward, the
+  // pre-placed starting battlefield, and the per-component drop on defeat).
   _renderOpponentsTable(opps) {
-    const rows = Object.entries(opps).map(([id, cfg]) => `
+    const rows = Object.entries(opps).map(([id, cfg]) => {
+      const comp = cfg.components ?? {};
+      return `
       <tr>
         <td class="opp-name">${esc(id)}</td>
         <td><input type="number" step="1" data-path="opponents.${id}.startingLife" value="${cfg.startingLife ?? 20}" style="width:5em;"></td>
         <td><input type="number" step="1" data-path="opponents.${id}.gold"         value="${cfg.gold ?? 0}"          style="width:5em;"></td>
         <td><input type="text" data-path="opponents.${id}.startingBattlefield" data-list-input="1" value="${esc((cfg.startingBattlefield ?? []).join(', '))}" style="width:28em;"></td>
+        <td><input type="number" step="1" data-path="opponents.${id}.components.leg_of_toad"  value="${comp.leg_of_toad  ?? 0}" style="width:3em;"></td>
+        <td><input type="number" step="1" data-path="opponents.${id}.components.eye_of_newt"  value="${comp.eye_of_newt  ?? 0}" style="width:3em;"></td>
+        <td><input type="number" step="1" data-path="opponents.${id}.components.unicorn_hair" value="${comp.unicorn_hair ?? 0}" style="width:3em;"></td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
     return `
       <table class="tuning-table">
         <thead>
-          <tr><th>Node</th><th>Starting life</th><th>Gold reward</th><th>Starting battlefield</th></tr>
+          <tr>
+            <th>Node</th><th>Starting life</th><th>Gold reward</th><th>Starting battlefield</th>
+            <th>Leg of Toad</th><th>Eye of Newt</th><th>Unicorn Hair</th>
+          </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>

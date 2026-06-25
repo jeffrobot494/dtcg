@@ -565,15 +565,13 @@ state.components = { leg_of_toad: 0, eye_of_newt: 0, unicorn_hair: 0 };
 
 ### TuningScene changes
 
-In `_renderOpponentsTable`, add three more `<td>` cells per row for the
-component rewards. Width budget for the row gets tight — consider stacking
-component inputs into one cell as a small inline group (`[3] [0] [0]` with
-tooltips), or splitting the section in two: life/gold/battlefield in one
-table, component rewards in a separate compact table below.
+**Decision locked**: extend `_renderOpponentsTable` with three more `<td>`
+cells per row for the component rewards (one small number input each:
+leg, eye, hair). The table gets wide but stays in one place. Use
+`width:3em` per input.
 
-Recommend the second approach: keep the existing Sorcerors table as-is, add
-a new "Component rewards" sub-table below it with three columns (leg, eye,
-hair) per node.
+The current Sorcerors table columns are: Node | Starting life | Gold |
+Starting battlefield. Add: Leg of Toad | Eye of Newt | Unicorn Hair.
 
 ### Recipes table seeding
 
@@ -625,3 +623,90 @@ existing `deepMerge` machinery.
 - No batch craft / craft-all.
 - No alternate component substitution.
 - No recipe presets / templates.
+
+---
+
+## Dynamic nodes (landed before crafting)
+
+Campaign nodes used to be hardcoded in five places. They now live in
+`Tuning.nodes` (array of `{ id, label, flavor, isBoss }`). The TuningScene
+has a "Nodes" section to add/remove/edit them.
+
+**Methods on Tuning:**
+- `addNode({ id, label, flavor?, isBoss? })` — id must match `/^[a-z][a-z0-9_]*$/`,
+  unique. Auto-creates a matching `opponents[id]` block with sensible defaults
+  (life 20, or 50 if isBoss).
+- `removeNode(id)` — drops the node + its `opponents[id]` entry. Caller is
+  responsible for calling `DeckLibrary.clearTag(id)` (TuningScene already does).
+- `updateNode(id, patch)` — label / flavor / isBoss editable in place. Id is
+  immutable.
+
+**Campaign:**
+- `getNodeIds()` — replaces the old `NODE_IDS` const. Always reads fresh from
+  Tuning.
+- `isBossNode(id)` — replaces the old `nodeId === 'boss'` literal check inside
+  `applyBattleResult`. Multiple boss nodes are technically allowed; any boss
+  win ends the run.
+
+**DeckLibrary:**
+- `RESERVED_DECK_TAG_PLAYER` (the string `'player_starting'`) is the only
+  reserved tag. Everything else comes from Tuning's node ids.
+- `clearTag(tag)` — strips a tag from any deck that has it. Called when a node
+  is deleted.
+- `setTag` no longer validates against a whitelist — the valid set is dynamic.
+
+**Where consumers read:**
+- `MapScene` iterates `Tuning.all().nodes`, splits boss vs non-boss for
+  rendering.
+- `BattleScene._opponentName(nodeId)` is a Tuning lookup.
+- `DeckEditorScene` builds the tag-dropdown options inline from
+  `RESERVED_DECK_TAG_PLAYER + Tuning.nodes.map(n => n.id)`.
+
+---
+
+## Storage keys cheat sheet
+
+| Key | Owner |
+|---|---|
+| `dtcg.deckLibrary` | `src/state/DeckLibrary.js` |
+| `dtcg.tuning.v1` | `src/state/Tuning.js` |
+| `dtcg.campaign.v1` | `src/state/Campaign.js` |
+
+`deepMerge(state, deepClone(DEFAULTS))` runs on Tuning load to backfill new
+schema fields onto stale blobs. Same pattern can apply to Campaign — already
+in place for `everOwnedCardIds` / `components` per the crafting spec above.
+
+---
+
+## Recent code patterns worth knowing
+
+1. **Engine auto-tap.** Agents emit `{ type: 'cast', card }` (or `activate`)
+   without pre-tapping. `Match._actionCast` / `_actionActivate` use
+   `_potentialPool(player)` for the affordability gate and `_autoTapForCost`
+   right before `payCost`. Don't add new "tap-then-cast" loops in agents.
+
+2. **`isUsefulTarget` is the single filter.** `_pickTarget` runs every
+   candidate through `isUsefulTarget` upfront before per-effect ranking. If
+   you add a new constraint (e.g., "don't target a creature with hexproof"),
+   put it in `isUsefulTarget` and both the cast gate (`hasUsefulTarget`) and
+   the picker benefit.
+
+3. **`_smartDamageX` predicts the target during chooseXValue.** For X-mana
+   damage spells, the AI runs `_pickTarget` with a hypothetical max X to
+   decide what it'll hit, then sizes X to exactly kill (or dump max on a
+   player face). Don't add a separate "tap-cap" predictor on the AI side.
+
+4. **`couldRegenerate(creature)`** predicts whether the controller could
+   activate a regen ability now (cost-payable from the *opponent's* potential
+   pool). Used by `isUsefulTarget` for burn. If you add new regen-granting
+   effects, keep this helper in sync — it scans `creature.abilities` for
+   `add_regen_shield`.
+
+5. **`match.canExecute(player, action)`** is the safe affordability/legality
+   predicate. UI uses it. The priorityLoop also has a safety net (rejected
+   actions are treated as a pass), so even buggy agents can't infinite-loop.
+
+6. **`X_DAMAGE_EFFECTS`** in `src/agents/BasicAI.js` lists the effect ids that
+   scale damage with X (`deal_damage`, `drain_life`). Add new ones here if
+   you write a new X-scaling damage effect, otherwise `_smartDamageX` won't
+   size X for it.

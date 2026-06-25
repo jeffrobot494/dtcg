@@ -1,8 +1,18 @@
+import database from '../cards/data/index.js';
+
 // Tuning singleton: game-wide knobs editable in the TuningScene. Persists
 // across runs and across browser sessions via localStorage. Independent from
 // Campaign state — adjusting a knob does not wipe an active campaign.
 
 const STORAGE_KEY = 'dtcg.tuning.v1';
+
+// Default recipe for any non-creature card with no explicit override: three
+// legs of toad (the common component). User can edit per-card on the Recipes
+// scene; a recipe with total 0 means "not craftable".
+const DEFAULT_RECIPE = Object.freeze({ leg_of_toad: 3, eye_of_newt: 0, unicorn_hair: 0 });
+
+// Per-opponent component reward block, used when an opponent is defeated.
+const ZERO_COMPONENTS = Object.freeze({ leg_of_toad: 0, eye_of_newt: 0, unicorn_hair: 0 });
 
 // Default campaign nodes. The `nodes` array drives MapScene, DeckLibrary's
 // tag list, BattleScene's opponent label, and Campaign.cleared. The reserved
@@ -27,14 +37,17 @@ export const DEFAULTS = Object.freeze({
   },
   nodes: DEFAULT_NODES,
   opponents: {
-    ashroad:            { gold: 10, startingLife: 20, startingBattlefield: [] },
-    emberhide:          { gold: 10, startingLife: 20, startingBattlefield: [] },
-    black_rival:        { gold: 15, startingLife: 20, startingBattlefield: [] },
-    hollow_acolyte:     { gold: 10, startingLife: 20, startingBattlefield: [] },
-    veiled_hierophant:  { gold: 10, startingLife: 20, startingBattlefield: [] },
-    wandering_heretic:  { gold: 10, startingLife: 20, startingBattlefield: [] },
-    boss:               { gold: 0,  startingLife: 50, startingBattlefield: ['mountain', 'mountain', 'mountain'] },
+    ashroad:            { gold: 10, startingLife: 20, startingBattlefield: [], components: { ...ZERO_COMPONENTS } },
+    emberhide:          { gold: 10, startingLife: 20, startingBattlefield: [], components: { ...ZERO_COMPONENTS } },
+    black_rival:        { gold: 15, startingLife: 20, startingBattlefield: [], components: { ...ZERO_COMPONENTS } },
+    hollow_acolyte:     { gold: 10, startingLife: 20, startingBattlefield: [], components: { ...ZERO_COMPONENTS } },
+    veiled_hierophant:  { gold: 10, startingLife: 20, startingBattlefield: [], components: { ...ZERO_COMPONENTS } },
+    wandering_heretic:  { gold: 10, startingLife: 20, startingBattlefield: [], components: { ...ZERO_COMPONENTS } },
+    boss:               { gold: 0,  startingLife: 50, startingBattlefield: ['mountain', 'mountain', 'mountain'], components: { ...ZERO_COMPONENTS } },
   },
+  // Per-card crafting recipes. Auto-seeded by initTuning for any non-creature
+  // card missing an entry, so newly added cards get a default recipe row.
+  recipes: {},
   merchant: {
     offerCount: 5,
     buyMultiplier: 3.0,
@@ -87,10 +100,24 @@ export function initTuning() {
     state = loaded;
     // Backfill any new fields added since the saved version.
     deepMerge(state, deepClone(DEFAULTS));
-    save();
   } else {
     state = deepClone(DEFAULTS);
-    save();
+  }
+  seedRecipes();
+  save();
+}
+
+// Ensure every non-creature, non-token card in the database has a recipe row.
+// Idempotent; called on init and after addNode so that newly added cards
+// (added to the database between sessions) get a default row.
+function seedRecipes() {
+  if (!state.recipes) state.recipes = {};
+  for (const def of Object.values(database)) {
+    if (def.type === 'creature') continue;
+    if (def.isToken) continue;
+    if (!state.recipes[def.id]) {
+      state.recipes[def.id] = { ...DEFAULT_RECIPE };
+    }
   }
 }
 
@@ -147,6 +174,7 @@ export const Tuning = {
         gold: 0,
         startingLife: isBoss ? 50 : 20,
         startingBattlefield: [],
+        components: { ...ZERO_COMPONENTS },
       };
     }
     save();

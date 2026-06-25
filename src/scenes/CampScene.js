@@ -45,6 +45,7 @@ export class CampScene {
         <div class="camp-actions">
           <button data-act="edit-deck">Edit active deck</button>
           <button data-act="toggle-collection">${this.showingCollection ? 'Hide' : 'View'} collection</button>
+          <button data-act="craft">Craft</button>
           <button data-act="new-run">Start new run…</button>
           <button data-act="back-to-map">Back to map</button>
         </div>
@@ -83,6 +84,10 @@ export class CampScene {
     get('toggle-collection')?.addEventListener('click', () => {
       this.showingCollection = !this.showingCollection;
       this.render();
+    });
+
+    get('craft')?.addEventListener('click', () => {
+      this.manager.switchTo('crafting');
     });
 
     get('new-run')?.addEventListener('click', () => {
