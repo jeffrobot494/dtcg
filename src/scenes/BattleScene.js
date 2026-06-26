@@ -121,7 +121,10 @@ export class BattleScene {
 
   _startMatch(p1, p2) {
     const rules = Tuning.all().rules ?? {};
-    this.match = new Match([p1, p2], { decklessLoss: rules.decklessLoss !== false });
+    this.match = new Match([p1, p2], {
+      decklessLoss: rules.decklessLoss !== false,
+      mulligansEnabled: rules.mulligansEnabled !== false,
+    });
     this.view = new BattleView(this.root, this.match);
     this.view.mount();
 

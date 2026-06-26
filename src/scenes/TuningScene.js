@@ -50,6 +50,8 @@ export class TuningScene {
         ${this._section('Rules', `
           ${this._checkboxRow('rules.decklessLoss',
             'Lose when you can\'t draw a card', t.rules?.decklessLoss !== false)}
+          ${this._checkboxRow('rules.mulligansEnabled',
+            'Offer mulligans at game start', t.rules?.mulligansEnabled !== false)}
         `)}
 
         ${this._section('Merchant', `

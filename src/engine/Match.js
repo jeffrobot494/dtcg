@@ -22,6 +22,7 @@ export class Match {
     this.log = [];
     this.onUpdate = null;
     this.decklessLoss = options.decklessLoss !== false;
+    this.mulligansEnabled = options.mulligansEnabled !== false;
 
     this.stack = new Stack();
     this.stackZone = new Zone('stack', null, { visibleTo: 'all', layout: 'stack' });
@@ -50,6 +51,9 @@ export class Match {
   async start() {
     for (const p of this.players) {
       for (let i = 0; i < 7; i++) this._drawSilent(p);
+    }
+    if (this.mulligansEnabled) {
+      await this._runMulliganPhase();
     }
     // Place any pre-configured starting battlefield cards (e.g., boss starts
     // with 3 Mountains in play). Cards are constructed fresh from the database
@@ -881,6 +885,72 @@ export class Match {
   _drawSilent(player) {
     const card = player.library.drawTop();
     if (card) player.hand.add(card);
+  }
+
+  // London mulligan: each player loops keep/mulligan; mulliganing shuffles the
+  // current hand back into library and redraws 7. On finally keeping after N
+  // mulligans, the player bottoms N cards from hand (their choice).
+  async _runMulliganPhase() {
+    this.phase = 'mulligan';
+    this.notify('Mulligan phase.');
+    for (const p of this.players) {
+      let mulligans = 0;
+      while (true) {
+        const decision = await p.agent.chooseMulligan(this, p, mulligans);
+        if (decision !== 'mulligan') break;
+        mulligans++;
+        this.notify(`${p.name} takes a mulligan (${mulligans}).`);
+        this._shuffleHandIntoLibrary(p);
+        for (let i = 0; i < 7; i++) this._drawSilent(p);
+      }
+      if (mulligans > 0) {
+        const bottomCount = Math.min(mulligans, Math.max(0, p.hand.cards.length - 1));
+        if (bottomCount > 0) {
+          const picks = await p.agent.chooseBottomCards(this, p, bottomCount);
+          this._bottomCards(p, picks, bottomCount);
+        }
+      } else {
+        this.notify(`${p.name} keeps.`);
+      }
+    }
+    this.phase = 'pregame';
+  }
+
+  _shuffleHandIntoLibrary(player) {
+    const hand = [...player.hand.cards];
+    for (const c of hand) {
+      player.hand.remove(c);
+      player.library.add(c);
+    }
+    player.library.shuffle();
+  }
+
+  // Move the first `count` valid cards from `picks` (in order) to the bottom
+  // of the player's library. Invalid or duplicate picks are skipped. If the
+  // agent supplied fewer than `count` valid picks, top up by bottoming
+  // arbitrary remaining hand cards so the count requirement is always met.
+  _bottomCards(player, picks, count) {
+    const seen = new Set();
+    const toBottom = [];
+    for (const c of (picks ?? [])) {
+      if (toBottom.length >= count) break;
+      if (!c || seen.has(c)) continue;
+      if (c.zone !== player.hand) continue;
+      seen.add(c);
+      toBottom.push(c);
+    }
+    while (toBottom.length < count) {
+      const fill = player.hand.cards.find(c => !seen.has(c));
+      if (!fill) break;
+      seen.add(fill);
+      toBottom.push(fill);
+    }
+    for (const c of toBottom) {
+      player.hand.remove(c);
+      player.library.cards.unshift(c);
+      c.zone = player.library;
+    }
+    this.notify(`${player.name} bottoms ${toBottom.length} card${toBottom.length === 1 ? '' : 's'}.`);
   }
 
   // Instantiates the cards named in player.startingBattlefield and adds them

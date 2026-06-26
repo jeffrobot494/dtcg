@@ -52,4 +52,12 @@ export class HumanAgent extends Agent {
   chooseDiscard(match) {
     return this._request('discard');
   }
+
+  chooseMulligan(match, player, mulliganCount) {
+    return this._request('mulligan-decide', { player, mulliganCount });
+  }
+
+  chooseBottomCards(match, player, count) {
+    return this._request('mulligan-bottom', { player, count });
+  }
 }

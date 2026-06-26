@@ -13,6 +13,9 @@ export class BattleView {
     this.selectedAttackers = new Set();
     this.selectedBlocker = null;
     this.blocks = [];
+    // Cards the human has tentatively picked to bottom during the post-keep
+    // mulligan step. Cleared when the choice is confirmed.
+    this.selectedBottoms = new Set();
     // Hide the opponent's hand by default — flipping the toggle peeks at it.
     this.hideOpponentHand = true;
 
@@ -140,6 +143,7 @@ export class BattleView {
     if (this.selectedAttackers.has(card)) classes.push('selected');
     if (this.selectedBlocker === card) classes.push('selected');
     if (this.blocks.some(b => b.blocker === card)) classes.push('selected');
+    if (this.selectedBottoms.has(card)) classes.push('selected');
     if (this.isCardTargetable(card)) classes.push('targetable');
 
     const parts = [];
@@ -253,6 +257,15 @@ export class BattleView {
         return `use ${name}'s ability${costText}?`;
       }
       case 'discard': return 'choose a card from your hand to discard';
+      case 'mulligan-decide': {
+        const n = req.mulliganCount ?? 0;
+        const taken = n === 0 ? 'no mulligans yet' : `${n} mulligan${n === 1 ? '' : 's'} so far`;
+        return `keep or mulligan? (${taken})`;
+      }
+      case 'mulligan-bottom': {
+        const c = req.count ?? 0;
+        return `choose ${c} card${c === 1 ? '' : 's'} to put on the bottom of your library`;
+      }
     }
     return req.kind;
   }
@@ -302,6 +315,18 @@ export class BattleView {
         return `
           <button data-act="cancel-discard">Cancel</button>
           <small>Click a card in your hand to discard it.</small>`;
+      case 'mulligan-decide':
+        return `
+          <button data-act="mulligan-keep">Keep</button>
+          <button data-act="mulligan-redraw">Mulligan</button>
+          <small>Mulligan shuffles your hand back and redraws 7. On finally keeping, you'll bottom one card per mulligan taken.</small>`;
+      case 'mulligan-bottom': {
+        const need = req.count ?? 0;
+        const have = this.selectedBottoms.size;
+        return `
+          <button data-act="confirm-bottom" ${have === need ? '' : 'disabled'}>Confirm (${have}/${need})</button>
+          <small>Click cards in your hand to toggle. Selected cards go to the bottom of your library in click order.</small>`;
+      }
     }
     return '';
   }
@@ -412,6 +437,12 @@ export class BattleView {
       }
       if (req.kind === 'discard' && card.zone === p.hand) {
         p.agent.resolve(card);
+        return;
+      }
+      if (req.kind === 'mulligan-bottom' && card.zone === p.hand) {
+        if (this.selectedBottoms.has(card)) this.selectedBottoms.delete(card);
+        else if (this.selectedBottoms.size < (req.count ?? 0)) this.selectedBottoms.add(card);
+        this.render();
         return;
       }
     }
@@ -561,6 +592,23 @@ export class BattleView {
       for (const p of m.players) {
         if (p.agent.pending?.kind === 'discard') {
           p.agent.resolve(null);
+          return;
+        }
+      }
+    } else if (act === 'mulligan-keep' || act === 'mulligan-redraw') {
+      for (const p of m.players) {
+        if (p.agent.pending?.kind === 'mulligan-decide') {
+          p.agent.resolve(act === 'mulligan-keep' ? 'keep' : 'mulligan');
+          return;
+        }
+      }
+    } else if (act === 'confirm-bottom') {
+      for (const p of m.players) {
+        const req = p.agent.pending;
+        if (req?.kind === 'mulligan-bottom' && this.selectedBottoms.size === (req.count ?? 0)) {
+          const picks = [...this.selectedBottoms];
+          this.selectedBottoms.clear();
+          p.agent.resolve(picks);
           return;
         }
       }

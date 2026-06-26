@@ -15,8 +15,14 @@
 //   confirmTrigger(match, source, trigger) -> boolean
 //     For optional ("you may") triggers. Cost (if any) is paid by the engine
 //     only on a true return.
+//   chooseMulligan(match, player, mulliganCount) -> 'keep' | 'mulligan'
+//     mulliganCount is how many mulligans the player has already taken on
+//     this opening; 0 the first time it's asked.
+//   chooseBottomCards(match, player, count) -> Card[]
+//     After a keep with mulliganCount > 0, the player puts that many cards
+//     from hand on the bottom of their library (in returned order).
 //
-// Future additions: declareCost (additional life cost), chooseMode, mulligan.
+// Future additions: declareCost (additional life cost), chooseMode.
 
 export class Agent {
   async choosePriorityAction(match) { throw new Error('not implemented'); }
@@ -26,4 +32,6 @@ export class Agent {
   async declareBlockers(match, attackers) { throw new Error('not implemented'); }
   async confirmTrigger(match, source, trigger) { throw new Error('not implemented'); }
   async chooseDiscard(match) { throw new Error('not implemented'); }
+  async chooseMulligan(match, player, mulliganCount) { throw new Error('not implemented'); }
+  async chooseBottomCards(match, player, count) { throw new Error('not implemented'); }
 }

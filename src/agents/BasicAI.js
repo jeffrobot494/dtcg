@@ -1,5 +1,5 @@
 import { Agent } from './Agent.js';
-import { canPayCost, maxXFromPool } from '../engine/Cost.js';
+import { canPayCost, maxXFromPool, manaValue } from '../engine/Cost.js';
 import { isValidTarget } from '../engine/Targeting.js';
 import { canBlock } from '../engine/Combat.js';
 
@@ -508,6 +508,26 @@ export class BasicAI extends Agent {
       }
     }
     return blocks;
+  }
+
+  // Mulligan when the opening hand has 0-1 or 6-7 lands, but never go past
+  // two mulligans (so we don't keep shrinking below 5 cards).
+  async chooseMulligan(match, player, mulliganCount) {
+    if (mulliganCount >= 2) return 'keep';
+    const lands = player.hand.cards.filter(c => c.isLand).length;
+    if (lands <= 1 || lands >= 6) return 'mulligan';
+    return 'keep';
+  }
+
+  // Bottom extra lands beyond 3 first, then the highest-MV non-lands.
+  async chooseBottomCards(match, player, count) {
+    if (count <= 0) return [];
+    const hand = [...player.hand.cards];
+    const lands = hand.filter(c => c.isLand);
+    const nonLands = hand.filter(c => !c.isLand)
+      .sort((a, b) => manaValue(b.def.cost) - manaValue(a.def.cost));
+    const extraLands = lands.slice(3);
+    return [...extraLands, ...nonLands].slice(0, count);
   }
 }
 

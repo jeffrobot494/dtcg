@@ -107,6 +107,7 @@ export class MapScene {
     const cleared = !!c.cleared[nodeId];
     const tagged = DeckLibrary.getByTag(nodeId);
     const playerHasDeck = c.activeDeck.length > 0;
+    const capturedCount = (c.capturedAt?.[nodeId] ?? []).length;
 
     let actionHtml;
     if (cleared) {
@@ -121,11 +122,16 @@ export class MapScene {
       actionHtml = `<button data-act="fight-${nodeId}">Fight</button>`;
     }
 
+    const capturedHtml = capturedCount > 0
+      ? `<span class="map-node-captured">${capturedCount} card${capturedCount === 1 ? '' : 's'} captured here</span>`
+      : '';
+
     return `
       <div class="map-node">
         <div class="map-node-label">
           <strong>${node.label || nodeId}</strong>
           <span class="map-node-flavor">${node.flavor ?? ''}</span>
+          ${capturedHtml}
         </div>
         ${actionHtml}
       </div>

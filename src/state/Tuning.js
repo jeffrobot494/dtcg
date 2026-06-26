@@ -56,7 +56,8 @@ export const DEFAULTS = Object.freeze({
     pool: 'all', // 'all' | 'non_red' | 'black_only' | 'random_subset'
   },
   rules: {
-    decklessLoss: true, // lose when you can't draw a card
+    decklessLoss: true,      // lose when you can't draw a card
+    mulligansEnabled: true,  // offer London-style mulligans at game start
   },
 });
 

@@ -109,6 +109,9 @@ export const Campaign = {
       everOwnedCardIds: [...new Set(cardIds)],
       components: zeroComponents(),
       cleared: Object.fromEntries(getNodeIds().map(id => [id, false])),
+      // Cards lost to a defeat at a given node. Returned to the player's
+      // collection when they next defeat that node.
+      capturedAt: {},
       merchantOffers: [],
       status: 'active',
       version: 1,
@@ -122,16 +125,17 @@ export const Campaign = {
   // params: { won, nodeId, playerFinalLife, playerGraveyardCardIds, opponentRemainingCards }
   applyBattleResult({ won, nodeId, playerFinalLife, playerGraveyardCardIds, opponentRemainingCards }) {
     if (!state) return;
-    state.life = playerFinalLife;
-
-    // Permanent attrition: graveyard cards removed from both collection and
-    // active deck (one copy each, since collection allows duplicates).
-    for (const id of (playerGraveyardCardIds ?? [])) {
-      removeFirst(state.collection, id);
-      removeFirst(state.activeDeck, id);
-    }
 
     if (won) {
+      state.life = playerFinalLife;
+
+      // Permanent attrition: graveyard cards removed from both collection and
+      // active deck (one copy each, since collection allows duplicates).
+      for (const id of (playerGraveyardCardIds ?? [])) {
+        removeFirst(state.collection, id);
+        removeFirst(state.activeDeck, id);
+      }
+
       if (state.cleared.hasOwnProperty(nodeId)) state.cleared[nodeId] = true;
       const tuning = Tuning.all();
       if (tuning.rewards?.lootRemainingDeck) {
@@ -146,13 +150,31 @@ export const Campaign = {
       for (const c of COMPONENT_IDS) {
         state.components[c] = (state.components[c] ?? 0) + (compReward[c] ?? 0);
       }
+
+      // Drain any cards previously captured at this node back into the
+      // collection.
+      const stash = state.capturedAt?.[nodeId] ?? [];
+      for (const id of stash) {
+        state.collection.push(id);
+        addEverOwned(id);
+      }
+      if (state.capturedAt) state.capturedAt[nodeId] = [];
+
       if (isBossNode(nodeId)) {
         state.status = 'victorious';
       } else {
         this.regenerateMerchant();  // wares change on each node clear
       }
     } else {
-      state.status = 'dead';
+      // Soft defeat: life resets, the entire active deck is captured by the
+      // defeating node. Status stays 'active' so the player can continue.
+      state.life = 1;
+      const lost = [...state.activeDeck];
+      for (const id of lost) removeFirst(state.collection, id);
+      state.activeDeck = [];
+      if (!state.capturedAt) state.capturedAt = {};
+      if (!state.capturedAt[nodeId]) state.capturedAt[nodeId] = [];
+      state.capturedAt[nodeId].push(...lost);
     }
 
     save();
