@@ -497,6 +497,13 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 0.7em;
   letter-spacing: 0.03em;
 }
+.deck-tag-checkboxes {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.deck-tag-checkbox {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.9em; color: #ddd;
+}
 .hint-inline { color: #999; font-size: 0.8em; }
 .warn { color: #fa6; font-weight: bold; }
 

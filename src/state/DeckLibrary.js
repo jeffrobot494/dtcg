@@ -2,14 +2,15 @@ import { loadDeck } from '../decks/parser.js';
 
 // Singleton: holds the user's collection of decks plus which one is "mine" and
 // which one is "opponent's" (for now manual; later driven by adventure state).
-// Persists to localStorage. Decks stored as { id, name, cards: [[id, count]], tag }.
+// Persists to localStorage. Decks stored as { id, name, cards: [[id, count]], tags }.
 //
 // Tags are used by the campaign layer to route decks into roles:
 //   player_starting (reserved) + each node id from Tuning.nodes.
-// Each tag is unique — assigning a tag transfers it from any previous holder.
-// The set of valid tags is dynamic (the user can add/remove nodes), so we
-// don't enforce a fixed whitelist here. Callers build the dropdown options
-// from Tuning + the reserved tag.
+// A deck may carry multiple tags (so one deck can serve multiple nodes). Each
+// tag still belongs to at most one deck — assigning a tag strips it from any
+// previous holder. The set of valid tags is dynamic (the user can add/remove
+// nodes), so we don't enforce a fixed whitelist here. Callers build the
+// checkbox list from Tuning + the reserved tag.
 
 const STORAGE_KEY = 'dtcg.deckLibrary';
 
@@ -41,10 +42,15 @@ export async function initDeckLibrary() {
   if (state) return;
   state = load();
   if (state) {
-    // Backfill tag field for decks saved before the tag system existed.
+    // Migrate legacy single-tag decks to the multi-tag shape, and ensure
+    // every deck has a tags array.
     for (const d of Object.values(state.decks ?? {})) {
-      if (d.tag === undefined) d.tag = null;
+      if (!Array.isArray(d.tags)) {
+        d.tags = d.tag ? [d.tag] : [];
+      }
+      delete d.tag;
     }
+    save();
     return;
   }
 
@@ -52,7 +58,7 @@ export async function initDeckLibrary() {
   try {
     const seed = await loadDeck('decks/starter_red.txt');
     const id = freshId();
-    state.decks[id] = { id, name: seed.name || 'Burn Starter', cards: seed.cards, tag: null };
+    state.decks[id] = { id, name: seed.name || 'Burn Starter', cards: seed.cards, tags: [] };
     state.activeId = id;
     state.opponentId = id;
   } catch (e) {
@@ -67,7 +73,7 @@ export const DeckLibrary = {
 
   create(name = 'Untitled', cards = []) {
     const id = freshId();
-    state.decks[id] = { id, name, cards, tag: null };
+    state.decks[id] = { id, name, cards, tags: [] };
     save();
     return state.decks[id];
   },
@@ -85,25 +91,34 @@ export const DeckLibrary = {
     save();
   },
 
-  // Look up a deck by role tag. Returns null if no deck has that tag.
+  // Look up a deck by role tag. Returns the first deck whose tags include it,
+  // or null if no deck has that tag.
   getByTag(tag) {
+    if (!tag) return null;
     for (const d of Object.values(state.decks)) {
-      if (d.tag === tag) return d;
+      if ((d.tags ?? []).includes(tag)) return d;
     }
     return null;
   },
 
-  // Assign a role tag to a deck. Strips it from any previous holder so each
-  // tag has at most one owner. Pass null/empty to clear the tag.
-  setTag(id, tag) {
-    if (!state.decks[id]) return;
-    const normalized = tag || null;
-    if (normalized) {
-      for (const d of Object.values(state.decks)) {
-        if (d.id !== id && d.tag === normalized) d.tag = null;
-      }
+  // Add a role tag to a deck. Strips it from any other deck so the tag has
+  // a single owner across the library. Idempotent.
+  addTag(id, tag) {
+    if (!state.decks[id] || !tag) return;
+    for (const d of Object.values(state.decks)) {
+      if (d.id === id) continue;
+      d.tags = (d.tags ?? []).filter(t => t !== tag);
     }
-    state.decks[id].tag = normalized;
+    const tags = state.decks[id].tags ?? [];
+    if (!tags.includes(tag)) tags.push(tag);
+    state.decks[id].tags = tags;
+    save();
+  },
+
+  // Remove a role tag from a specific deck. Idempotent.
+  removeTag(id, tag) {
+    if (!state.decks[id] || !tag) return;
+    state.decks[id].tags = (state.decks[id].tags ?? []).filter(t => t !== tag);
     save();
   },
 
@@ -113,7 +128,12 @@ export const DeckLibrary = {
     if (!tag) return;
     let changed = false;
     for (const d of Object.values(state.decks)) {
-      if (d.tag === tag) { d.tag = null; changed = true; }
+      const before = d.tags ?? [];
+      const after = before.filter(t => t !== tag);
+      if (after.length !== before.length) {
+        d.tags = after;
+        changed = true;
+      }
     }
     if (changed) save();
   },

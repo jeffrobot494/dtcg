@@ -225,11 +225,13 @@ export class DeckEditorScene {
       const mark = (sel && this._hasUnsavedChanges()) ? ' *' : '';
       const pTag = d.id === activeId ? '<span class="tag tag-p">P</span>' : '';
       const oTag = d.id === oppId ? '<span class="tag tag-o">O</span>' : '';
-      const roleTag = d.tag ? `<span class="tag tag-role">${esc(d.tag)}</span>` : '';
+      const roleTags = (d.tags ?? [])
+        .map(t => `<span class="tag tag-role">${esc(t)}</span>`)
+        .join('');
       return `
         <div class="deck-list-item ${sel ? 'selected' : ''}" data-deck-id="${d.id}">
           <span class="deck-name">${esc(d.name)}${mark}</span>
-          <span class="deck-tags">${roleTag}${pTag}${oTag}</span>
+          <span class="deck-tags">${roleTags}${pTag}${oTag}</span>
         </div>
       `;
     }).join('');
@@ -275,16 +277,17 @@ export class DeckEditorScene {
     const isActive = this.selectedId === activeId;
     const isOpp = this.selectedId === oppId;
 
-    const currentTag = DeckLibrary.get(this.selectedId)?.tag ?? null;
+    const currentTags = DeckLibrary.get(this.selectedId)?.tags ?? [];
     const availableTags = [
       RESERVED_DECK_TAG_PLAYER,
       ...(Tuning.all()?.nodes ?? []).map(n => n.id),
     ];
-    const tagOptions = ['<option value="">(none)</option>']
-      .concat(availableTags.map(t =>
-        `<option value="${t}" ${t === currentTag ? 'selected' : ''}>${t}</option>`
-      ))
-      .join('');
+    const tagCheckboxes = availableTags.map(t => `
+      <label class="deck-tag-checkbox">
+        <input type="checkbox" data-act="tag-toggle" data-tag="${esc(t)}" ${currentTags.includes(t) ? 'checked' : ''}>
+        ${esc(t)}
+      </label>
+    `).join('');
 
     return `
       <div class="edit-header">
@@ -292,10 +295,9 @@ export class DeckEditorScene {
           <label>Name: <input type="text" class="deck-name-input" data-act="rename" value="${esc(wc.name)}"></label>
         </div>
         <div class="edit-row">
-          <label>Role tag:
-            <select data-act="set-tag">${tagOptions}</select>
-          </label>
-          <small class="hint-inline">Used by the campaign to route this deck to a node.</small>
+          <label class="tag-label">Role tags:</label>
+          <div class="deck-tag-checkboxes">${tagCheckboxes}</div>
+          <small class="hint-inline">Each tag belongs to one deck — checking it here removes it from any other deck.</small>
         </div>
         <div class="edit-row">
           <label><input type="checkbox" data-act="toggle-active" ${isActive ? 'checked' : ''}> Use as my deck</label>
@@ -437,13 +439,14 @@ export class DeckEditorScene {
       };
     }
 
-    const tagSelect = get('set-tag');
-    if (tagSelect) {
-      tagSelect.onchange = () => {
-        DeckLibrary.setTag(this.selectedId, tagSelect.value || null);
+    this.root.querySelectorAll('[data-act="tag-toggle"]').forEach(cb => {
+      cb.onchange = () => {
+        const tag = cb.dataset.tag;
+        if (cb.checked) DeckLibrary.addTag(this.selectedId, tag);
+        else           DeckLibrary.removeTag(this.selectedId, tag);
         this.render();
       };
-    }
+    });
 
     const backBtn = get('back-to-camp');
     if (backBtn) {
